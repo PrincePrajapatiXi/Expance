@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="expanceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A8A" />
+      <stop offset="100%" stop-color="#3B82F6" />
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="128" fill="url(#expanceGrad)" />
+  <!-- Wallet Icon -->
+  <path d="M120 180 C120 150, 140 130, 170 130 L370 130 C390 130, 400 140, 400 160 L400 190 L120 190 Z" fill="#93C5FD" />
+  <rect x="110" y="180" width="292" height="200" rx="32" fill="#FFFFFF" />
+  <path d="M310 240 L380 240 C391 240, 400 249, 400 260 L400 300 C400 311, 391 320, 380 320 L310 320 C299 320, 290 311, 290 300 L290 260 C290 249, 299 240, 310 240 Z" fill="#1E3A8A" />
+  <circle cx="345" cy="280" r="10" fill="#FBBF24" />
+</svg>
