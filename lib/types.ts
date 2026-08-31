@@ -11,6 +11,7 @@ export interface Transaction {
   description: string;
   amount: number;
   payment_method?: PaymentMethod;
+  payment_mode?: string;
   notes?: string;
   timestamp: string; // ISO 8601 string
   created_at?: string;
