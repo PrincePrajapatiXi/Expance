@@ -4,7 +4,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   Bell,
-  Calendar,
   Wallet,
   Check,
   Sparkles,
@@ -14,6 +13,8 @@ import {
   LogOut,
   LogIn,
   ShieldCheck,
+  ChevronRight,
+  ExternalLink,
 } from 'lucide-react';
 import { NotificationItem, UserProfile } from '@/lib/types';
 import { getUserProfile, saveUserProfile, DEFAULT_USER } from '@/lib/db';
@@ -101,18 +102,27 @@ export default function Header({
     }
   }, [onProfileUpdate]);
 
-  // Close dropdown on click outside
+  // Close dropdown on click outside or Escape key
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setIsUserMenuOpen(false);
       }
     };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsUserMenuOpen(false);
+      }
+    };
+
     if (isUserMenuOpen) {
       document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
     };
   }, [isUserMenuOpen]);
 
@@ -175,9 +185,13 @@ export default function Header({
     if (onProfileUpdate) onProfileUpdate(authUserProfile);
   };
 
+  const displayName = profile.full_name || 'Account Holder';
+  const displayEmail = profile.email || 'guest@expance.app';
+  const initials = getInitials(displayName, displayEmail);
+
   return (
     <>
-      <header className="sticky top-0 z-30 w-full overflow-x-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-3 sm:px-4 py-3 shadow-xs">
+      <header className="sticky top-0 z-40 w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-3 sm:px-4 py-3 shadow-xs">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-2 min-w-0">
           {/* Logo & Brand */}
           <Link href="/" className="flex items-center gap-2.5 group">
@@ -211,6 +225,7 @@ export default function Header({
             <div className="relative">
               <button
                 onClick={() => setShowNotifications(true)}
+                type="button"
                 className="relative p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer"
                 aria-label="View notifications"
               >
@@ -223,53 +238,81 @@ export default function Header({
               </button>
             </div>
 
-            {/* Dynamic User Profile Avatar Button / Auth Trigger */}
+            {/* Dynamic User Profile Avatar Button & Floating Dropdown */}
             <div className="relative pl-1" ref={menuRef}>
               <button
+                type="button"
                 onClick={() => setIsUserMenuOpen((prev) => !prev)}
-                className="flex items-center gap-1.5 p-0.5 rounded-full hover:ring-2 hover:ring-indigo-500/50 transition-all cursor-pointer focus:outline-hidden"
+                className="flex items-center gap-1.5 p-0.5 rounded-full hover:ring-2 hover:ring-indigo-500/60 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-indigo-500/60 active:scale-95"
                 aria-label="User profile menu"
                 aria-expanded={isUserMenuOpen}
+                title="Account & Profile Settings"
               >
-                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-600 p-0.5 shadow-xs">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-600 p-0.5 shadow-sm">
                   <div className="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-white font-extrabold text-xs overflow-hidden">
                     {profile.avatar_url && !imgError ? (
                       <img
                         src={profile.avatar_url}
-                        alt={profile.full_name || 'User Avatar'}
+                        alt={displayName}
                         className="w-full h-full object-cover"
                         onError={() => setImgError(true)}
                       />
                     ) : (
-                      <span>{getInitials(profile.full_name, profile.email)}</span>
+                      <span>{initials}</span>
                     )}
                   </div>
                 </div>
               </button>
 
-              {/* User Dropdown Menu */}
+              {/* Floating User Dropdown Menu */}
               {isUserMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-slate-900 rounded-2xl shadow-xl border border-slate-200/80 dark:border-slate-800 py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
-                  {/* User Profile Header */}
-                  <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-                    <p className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
-                      {profile.full_name || 'Personal Account'}
-                    </p>
-                    <p className="text-[11px] text-slate-500 truncate mt-0.5">
-                      {profile.email}
-                    </p>
-                    <div className="flex items-center gap-1.5 mt-2">
+                <div className="absolute right-0 mt-2.5 w-72 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  {/* User Profile Header Tile */}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-100 dark:border-slate-700/60 mb-1">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-600 p-0.5 shadow-xs shrink-0">
+                        <div className="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-white font-extrabold text-xs overflow-hidden">
+                          {profile.avatar_url && !imgError ? (
+                            <img
+                              src={profile.avatar_url}
+                              alt={displayName}
+                              className="w-full h-full object-cover"
+                              onError={() => setImgError(true)}
+                            />
+                          ) : (
+                            <span>{initials}</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-extrabold text-xs text-slate-900 dark:text-white truncate">
+                          {displayName}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                          {displayEmail}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 mt-2.5 pt-2 border-t border-slate-200/60 dark:border-slate-700/60">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50">
-                        {profile.currency || 'INR'} ₹
+                        {profile.currency || 'INR'} (₹)
                       </span>
-                      <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400">
-                        {isAuthenticated ? 'Cloud Synced' : 'Local / Online'}
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                          isAuthenticated
+                            ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <ShieldCheck className="w-3 h-3" />
+                        {isAuthenticated ? 'Cloud Synced' : 'Guest / Local'}
                       </span>
                     </div>
                   </div>
 
-                  {/* Menu Options */}
-                  <div className="py-1.5 px-1 space-y-0.5">
+                  {/* Menu Action Options */}
+                  <div className="space-y-1 py-1">
                     {!isAuthenticated && (
                       <button
                         type="button"
@@ -277,20 +320,26 @@ export default function Header({
                           setIsUserMenuOpen(false);
                           setShowAuthModal(true);
                         }}
-                        className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-colors cursor-pointer text-left"
+                        className="flex items-center justify-between w-full px-3 py-2.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/50 rounded-2xl transition-colors cursor-pointer text-left"
                       >
-                        <LogIn className="w-4 h-4" />
-                        <span>Sign In / Connect Account</span>
+                        <div className="flex items-center gap-2.5">
+                          <LogIn className="w-4 h-4" />
+                          <span>Sign In / Connect Supabase</span>
+                        </div>
+                        <ChevronRight className="w-3.5 h-3.5 text-indigo-400" />
                       </button>
                     )}
 
                     <Link
                       href="/profile"
                       onClick={() => setIsUserMenuOpen(false)}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-xl transition-colors"
+                      className="flex items-center justify-between w-full px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-2xl transition-colors"
                     >
-                      <Settings className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                      <span>Profile Settings</span>
+                      <div className="flex items-center gap-2.5">
+                        <Settings className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                        <span>Profile & Export Settings</span>
+                      </div>
+                      <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
                     </Link>
 
                     <button
@@ -299,27 +348,27 @@ export default function Header({
                         setIsUserMenuOpen(false);
                         setShowCurrencyModal(true);
                       }}
-                      className="flex items-center justify-between w-full px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-xl transition-colors cursor-pointer text-left"
+                      className="flex items-center justify-between w-full px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/80 rounded-2xl transition-colors cursor-pointer text-left"
                     >
                       <div className="flex items-center gap-2.5">
                         <Coins className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                         <span>Currency Preferences</span>
                       </div>
-                      <span className="text-[10px] font-bold text-slate-400 uppercase">
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded-md">
                         {profile.currency || 'INR'}
                       </span>
                     </button>
                   </div>
 
-                  {/* Logout Divider & Action */}
-                  <div className="pt-1 border-t border-slate-100 dark:border-slate-800 px-1">
+                  {/* Logout Action Divider */}
+                  <div className="pt-1 mt-1 border-t border-slate-100 dark:border-slate-800">
                     <button
                       type="button"
                       onClick={handleLogout}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer text-left"
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-xs font-semibold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-2xl transition-colors cursor-pointer text-left"
                     >
-                      <LogOut className="w-4 h-4 text-rose-600" />
-                      <span>{isAuthenticated ? 'Log Out' : 'Reset Session'}</span>
+                      <LogOut className="w-4 h-4" />
+                      <span>{isAuthenticated ? 'Sign Out / Log Out' : 'Reset Guest Session'}</span>
                     </button>
                   </div>
                 </div>
