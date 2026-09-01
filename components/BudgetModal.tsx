@@ -33,10 +33,10 @@ export default function BudgetModal({
 
   const quickPresets = [2000, 3500, 5000, 8000, 12000, 20000];
 
+  if (!isOpen) return null;
+
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs pointer-events-auto">
           <motion.div
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
@@ -130,7 +130,5 @@ export default function BudgetModal({
             </form>
           </motion.div>
         </div>
-      )}
-    </AnimatePresence>
   );
 }

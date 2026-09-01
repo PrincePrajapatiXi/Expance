@@ -224,7 +224,7 @@ export default function Dashboard() {
         onMonthChange={setSelectedMonth}
       />
 
-      <main className="max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">
+      <main className="relative z-10 max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">
         {/* Sync Status Badge & Quick Info Bar */}
         <div className="flex items-center justify-between py-1 mb-2">
           <div className="flex items-center gap-2">
