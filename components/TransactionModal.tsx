@@ -4,7 +4,7 @@ import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Plus, Check, Calendar, Tag, FileText, IndianRupee, CreditCard, MessageSquare } from 'lucide-react';
+import { X, Plus, Check, Calendar, Tag, FileText, IndianRupee, CreditCard, MessageSquare, TrendingUp, TrendingDown } from 'lucide-react';
 import { transactionSchema, TransactionFormData, Transaction, PaymentMethod } from '@/lib/types';
 import { CATEGORIES, toDateTimeLocalFormat } from '@/lib/utils';
 
@@ -33,8 +33,8 @@ export default function TransactionModal({
   } = useForm<TransactionFormData>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
-      type: 'expense',
-      category: 'Food & Dining',
+      type: 'income',
+      category: 'Salary / Wages',
       amount: undefined,
       description: '',
       payment_method: 'UPI',
@@ -61,8 +61,8 @@ export default function TransactionModal({
       });
     } else {
       reset({
-        type: 'expense',
-        category: 'Food & Dining',
+        type: 'income',
+        category: 'Salary / Wages',
         amount: undefined,
         description: '',
         payment_method: 'UPI',
@@ -102,7 +102,7 @@ export default function TransactionModal({
             className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs"
           />
 
-          {/* Modal / Bottom Sheet Container */}
+          {/* Modal Container */}
           <motion.div
             initial={{ y: '100%', opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -110,7 +110,7 @@ export default function TransactionModal({
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className="relative z-10 w-full sm:max-w-lg bg-white dark:bg-slate-900 rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-slate-100 dark:border-slate-800 max-h-[90vh] overflow-y-auto"
           >
-            {/* Mobile Handle Pill */}
+            {/* Mobile Drag Indicator */}
             <div className="w-12 h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto mb-4 sm:hidden" />
 
             {/* Modal Header */}
@@ -131,26 +131,13 @@ export default function TransactionModal({
 
             {/* Form */}
             <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4 mt-4">
-              {/* Type Switcher (Income vs Expense) */}
+              {/* Type Switcher: 1st Position: Income (+) [Emerald], 2nd Position: Expense (-) [Rose] */}
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">
                   Transaction Type
                 </label>
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setValue('type', 'expense');
-                      setValue('category', 'Food & Dining');
-                    }}
-                    className={`py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                      selectedType === 'expense'
-                        ? 'bg-rose-600 text-white shadow-md'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-rose-600'
-                    }`}
-                  >
-                    Expense (-)
-                  </button>
+                <div className="grid grid-cols-2 gap-2 p-1.5 bg-slate-100 dark:bg-slate-800/80 rounded-2xl border border-slate-200/60 dark:border-slate-700/60">
+                  {/* Option 1 (Left): Income (+) */}
                   <button
                     type="button"
                     onClick={() => {
@@ -159,11 +146,29 @@ export default function TransactionModal({
                     }}
                     className={`py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
                       selectedType === 'income'
-                        ? 'bg-emerald-600 text-white shadow-md'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600'
+                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-emerald-600 hover:bg-white/50 dark:hover:bg-slate-700/50'
                     }`}
                   >
+                    <TrendingUp className="w-4 h-4" />
                     Income (+)
+                  </button>
+
+                  {/* Option 2 (Right): Expense (-) */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setValue('type', 'expense');
+                      setValue('category', 'Food & Dining');
+                    }}
+                    className={`py-2.5 rounded-xl font-extrabold text-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                      selectedType === 'expense'
+                        ? 'bg-rose-600 text-white shadow-md shadow-rose-600/20'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-rose-600 hover:bg-white/50 dark:hover:bg-slate-700/50'
+                    }`}
+                  >
+                    <TrendingDown className="w-4 h-4" />
+                    Expense (-)
                   </button>
                 </div>
               </div>
@@ -183,6 +188,7 @@ export default function TransactionModal({
                     placeholder="0.00"
                     {...register('amount', { valueAsNumber: true })}
                     className="w-full bg-slate-50 dark:bg-slate-800/80 text-base font-extrabold text-slate-900 dark:text-slate-100 rounded-2xl pl-9 pr-4 py-3 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40"
+                    required
                   />
                 </div>
                 {errors.amount && (
@@ -201,9 +207,10 @@ export default function TransactionModal({
                   <FileText className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                   <input
                     type="text"
-                    placeholder="e.g. Swiggy food delivery or Freelance payment"
+                    placeholder={selectedType === 'income' ? 'e.g. Monthly Salary, Freelance project' : 'e.g. Grocery shopping, Electricity bill'}
                     {...register('description')}
                     className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs font-medium text-slate-900 dark:text-slate-100 rounded-2xl pl-10 pr-4 py-3 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40"
+                    required
                   />
                 </div>
                 {errors.description && (
@@ -272,7 +279,7 @@ export default function TransactionModal({
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Shared with roommates, Bill #1029"
+                  placeholder="e.g. Project milestone #1, shared with friend"
                   {...register('notes')}
                   className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs font-medium text-slate-900 dark:text-slate-100 rounded-2xl px-4 py-2.5 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40"
                 />

@@ -264,47 +264,43 @@ export async function fetchTransactions(): Promise<Transaction[]> {
   return local;
 }
 
-// 2. Add Transaction (Immediate LocalStorage persistence + Cloud Sync if authenticated)
+// 2. Add Transaction (Supabase Cloud Sync + LocalStorage Cache)
 export async function addTransaction(formData: TransactionFormData): Promise<Transaction> {
   const localId = generateUUID();
-  let currentUser = CURRENT_USER;
+  const timestampStr = formData.timestamp
+    ? new Date(formData.timestamp).toISOString()
+    : new Date().toISOString();
 
-  // Build local transaction object
+  // Build transaction object
   const newTx: Transaction = {
     id: localId,
-    user_id: currentUser.id,
+    user_id: CURRENT_USER.id,
     type: formData.type,
     category: formData.category,
     description: formData.description || '',
-    amount: Number(formData.amount),
+    amount: Number(formData.amount) || 0,
     payment_method: formData.payment_method || 'UPI',
     payment_mode: formData.payment_method || 'UPI',
     notes: formData.notes || '',
-    timestamp: formData.timestamp ? new Date(formData.timestamp).toISOString() : new Date().toISOString(),
+    timestamp: timestampStr,
     created_at: new Date().toISOString(),
   };
 
-  // 1. Immediately persist to localStorage for instant UI feedback and zero data loss
-  const currentLocal = getLocalTransactions();
-  const updatedLocal = [newTx, ...currentLocal];
-  saveLocalTransactions(updatedLocal);
-
-  // 2. If authenticated with Supabase, sync to cloud database
+  // 1. If authenticated with Supabase, insert directly into cloud DB
   if (isSupabaseConfigured && supabase) {
     try {
       const authUser = await getAuthUser();
       if (authUser) {
         newTx.user_id = authUser.id;
 
-        // Exact Supabase table columns: id, user_id, type, category, description, payment_mode, amount, notes, timestamp
         const dbPayload = {
           user_id: authUser.id,
           type: newTx.type,
           category: newTx.category,
           description: newTx.description,
           payment_mode: newTx.payment_method || 'UPI',
-          amount: newTx.amount,
-          notes: newTx.notes,
+          amount: Number(newTx.amount),
+          notes: newTx.notes || '',
           timestamp: newTx.timestamp,
         };
 
@@ -314,23 +310,27 @@ export async function addTransaction(formData: TransactionFormData): Promise<Tra
           .select()
           .single();
 
+        if (!error && data) {
+          const syncedTx = normalizeTransaction(data);
+          const currentLocal = getLocalTransactions();
+          const updatedLocal = [syncedTx, ...currentLocal.filter((t) => t.id !== syncedTx.id && t.id !== localId)];
+          saveLocalTransactions(updatedLocal);
+          return syncedTx;
+        }
+
         if (error) {
           console.error('[Supabase Insert Error]:', error.message, error);
-          emitDBEvent('insert_error', `Cloud save failed (${error.message}). Saved locally on device.`, error);
-        } else if (data) {
-          const syncedTx = normalizeTransaction(data);
-          // Update the local entry with the Supabase row ID and timestamps
-          const reSyncedLocal = updatedLocal.map((t) => (t.id === newTx.id ? syncedTx : t));
-          saveLocalTransactions(reSyncedLocal);
-          return syncedTx;
         }
       }
     } catch (err: any) {
       console.error('[Supabase Insert Exception]:', err);
-      emitDBEvent('insert_error', `Failed to connect to cloud database: ${err?.message || 'Network error'}. Saved locally.`, err);
     }
   }
 
+  // 2. Fallback / Guest mode: persist to localStorage
+  const currentLocal = getLocalTransactions();
+  const updatedLocal = [newTx, ...currentLocal.filter((t) => t.id !== newTx.id)];
+  saveLocalTransactions(updatedLocal);
   return newTx;
 }
 
