@@ -12,13 +12,44 @@ import KPICards from '@/components/KPICards';
 import FilterBar from '@/components/FilterBar';
 import TransactionList from '@/components/TransactionList';
 import TransactionModal from '@/components/TransactionModal';
-import BottomNav from '@/components/BottomNav';
 import BudgetSummaryCard from '@/components/BudgetSummaryCard';
+import BottomNav from '@/components/BottomNav';
 import PWAInstallPrompt from '@/components/PWAInstallPrompt';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Dashboard() {
   const currentDate = new Date();
   const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
+
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
+  const [filters, setFilters] = useState<FilterOptions>({
+    type: 'all',
+    category: 'all',
+    dateRange: 'all',
+    searchQuery: '',
+    selectedMonth: currentMonthStr,
+  });
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [isExportOpen, setIsExportOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  // Close Export Dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setIsExportOpen(false);
+      }
+    };
+    if (isExportOpen) {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isExportOpen]);
 
   const {
     transactions,
@@ -33,69 +64,28 @@ export default function Dashboard() {
     removeTransaction,
   } = useTransactions();
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
-  const [isExportOpen, setIsExportOpen] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
-  const exportRef = useRef<HTMLDivElement>(null);
-
-  // Close export dropdown on click outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
-        setIsExportOpen(false);
-      }
-    };
-    if (isExportOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [isExportOpen]);
-
-  const [filters, setFilters] = useState<FilterOptions>({
-    type: 'all',
-    category: 'all',
-    dateRange: 'all',
-    searchQuery: '',
-    selectedMonth: currentMonthStr,
-  });
-
-  // Filter transactions
+  // Filter Transactions based on UI controls & Selected Month
   const filteredTransactions = transactions.filter((tx) => {
-    const txDate = new Date(tx.timestamp);
-
-    // Month filter check
+    // Month filter
     if (selectedMonth) {
-      const [year, month] = selectedMonth.split('-');
-      if (
-        txDate.getFullYear() !== parseInt(year) ||
-        txDate.getMonth() + 1 !== parseInt(month)
-      ) {
-        return false;
-      }
+      const txMonth = tx.timestamp.substring(0, 7);
+      if (txMonth !== selectedMonth) return false;
     }
 
     // Type filter
-    if (filters.type !== 'all' && tx.type !== filters.type) {
-      return false;
-    }
+    if (filters.type !== 'all' && tx.type !== filters.type) return false;
 
     // Category filter
-    if (filters.category !== 'all' && tx.category !== filters.category) {
-      return false;
-    }
+    if (filters.category !== 'all' && tx.category !== filters.category) return false;
 
     // Payment Mode filter
     if (filters.paymentMethod && filters.paymentMethod !== 'all') {
-      const mode = tx.payment_method || tx.payment_mode;
-      if (mode !== filters.paymentMethod) return false;
+      const txMode = tx.payment_method || tx.payment_mode || 'UPI';
+      if (txMode !== filters.paymentMethod) return false;
     }
 
-    // Search query
-    if (filters.searchQuery) {
+    // Search query filter
+    if (filters.searchQuery.trim()) {
       const q = filters.searchQuery.toLowerCase();
       const matchDesc = tx.description?.toLowerCase().includes(q);
       const matchCat = tx.category?.toLowerCase().includes(q);
@@ -107,6 +97,7 @@ export default function Dashboard() {
     // Date range filter
     if (filters.dateRange !== 'all') {
       const now = new Date();
+      const txDate = new Date(tx.timestamp);
       if (filters.dateRange === 'today') {
         const isToday =
           txDate.getDate() === now.getDate() &&
@@ -234,38 +225,6 @@ export default function Dashboard() {
       />
 
       <main className="max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">
-        {/* Floating Toast Notification Banner */}
-        {toast && (
-          <div className="mb-4 animate-in fade-in slide-in-from-top-3 duration-200">
-            <div
-              className={`p-3 rounded-2xl flex items-center justify-between text-xs font-semibold shadow-md border ${
-                toast.type === 'error'
-                  ? 'bg-rose-50 dark:bg-rose-950/80 text-rose-800 dark:text-rose-200 border-rose-200 dark:border-rose-900'
-                  : toast.type === 'warning'
-                  ? 'bg-amber-50 dark:bg-amber-950/80 text-amber-800 dark:text-amber-200 border-amber-200 dark:border-amber-900'
-                  : toast.type === 'success'
-                  ? 'bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-900'
-                  : 'bg-indigo-50 dark:bg-indigo-950/80 text-indigo-800 dark:text-indigo-200 border-indigo-200 dark:border-indigo-900'
-              }`}
-            >
-              <div className="flex items-center gap-2.5">
-                {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />}
-                {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
-                {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />}
-                {toast.type === 'info' && <Info className="w-4 h-4 text-indigo-600 shrink-0" />}
-                <span>{toast.message}</span>
-              </div>
-              <button
-                onClick={dismissToast}
-                className="p-1 rounded-lg hover:bg-black/5 dark:hover:bg-white/10 text-slate-500 cursor-pointer ml-3 shrink-0"
-                aria-label="Dismiss notification"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-
         {/* Sync Status Badge & Quick Info Bar */}
         <div className="flex items-center justify-between py-1 mb-2">
           <div className="flex items-center gap-2">
@@ -314,7 +273,6 @@ export default function Dashboard() {
                 }`}
                 aria-label="Export transactions"
                 aria-expanded={isExportOpen}
-                title={filteredTransactions.length === 0 ? 'No transactions to export' : 'Export your transactions'}
               >
                 {isExporting ? (
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -407,6 +365,45 @@ export default function Dashboard() {
           />
         )}
       </main>
+
+      {/* Floating Toast Notification (bottom-right, non-intrusive) */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            className="fixed bottom-24 sm:bottom-8 left-4 right-4 sm:left-auto sm:right-24 z-50 max-w-sm pointer-events-auto"
+          >
+            <div
+              className={`p-3 rounded-2xl flex items-center justify-between text-xs font-semibold shadow-2xl border backdrop-blur-md ${
+                toast.type === 'error'
+                  ? 'bg-rose-950/95 text-rose-100 border-rose-800'
+                  : toast.type === 'warning'
+                  ? 'bg-amber-950/95 text-amber-100 border-amber-800'
+                  : toast.type === 'success'
+                  ? 'bg-emerald-950/95 text-emerald-100 border-emerald-800'
+                  : 'bg-slate-900/95 text-slate-100 border-slate-700'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                {toast.type === 'error' && <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />}
+                {toast.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
+                {toast.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />}
+                {toast.type === 'info' && <Info className="w-4 h-4 text-indigo-400 shrink-0" />}
+                <span>{toast.message}</span>
+              </div>
+              <button
+                onClick={dismissToast}
+                className="p-1 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white cursor-pointer ml-3 shrink-0"
+                aria-label="Dismiss notification"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Floating Action Button (FAB) anchored bottom-right */}
       <button

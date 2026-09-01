@@ -27,8 +27,9 @@ export function useTransactions() {
   const [toast, setToast] = useState<ToastNotification | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Subtle auto-dismissing toast (2.5s)
   const showToast = useCallback(
-    (message: string, type: 'error' | 'success' | 'info' | 'warning' = 'info', durationMs = 3500) => {
+    (message: string, type: 'error' | 'success' | 'info' | 'warning' = 'info', durationMs = 2500) => {
       const id = Date.now();
       setToast({ id, message, type });
 
@@ -54,49 +55,22 @@ export function useTransactions() {
 
   // Initial load
   const loadData = useCallback(async () => {
-    // 1. Immediately populate from local storage to avoid blank UI
     const immediateLocal = getLocalTransactions();
     if (immediateLocal.length > 0) {
       setTransactions(immediateLocal);
     }
 
-    // 2. Fetch latest from Hybrid Engine (Supabase if authenticated, else localStorage)
     try {
       const data = await fetchTransactions();
       setTransactions(data);
     } catch (err: any) {
-      console.warn('Failed to fetch transactions:', err);
+      console.warn('[Sync] Offline or fetch failed, using local storage:', err);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  // Listen for DB and Supabase events
-  useEffect(() => {
-    const handleDbEvent = (e: Event) => {
-      const customEvent = e as CustomEvent<DBEventDetail>;
-      if (!customEvent.detail) return;
-      const { type, message } = customEvent.detail;
-      if (type === 'insert_error' || type === 'sync_error') {
-        showToast(message, 'warning', 4000);
-      } else if (type === 'sync_success') {
-        // Refresh local state with newly synced data without popping noisy banner
-        setTransactions(getLocalTransactions());
-      }
-    };
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('expance:db_event', handleDbEvent);
-    }
-
-    return () => {
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('expance:db_event', handleDbEvent);
-      }
-    };
-  }, [showToast]);
-
-  // Handle Supabase Auth changes & Auto-Sync Local Data
+  // Handle Supabase Auth changes & Quiet Auto-Sync
   useEffect(() => {
     loadData();
 
@@ -114,16 +88,13 @@ export function useTransactions() {
         async (event, session) => {
           if (session?.user) {
             setIsAuthenticated(true);
-            // Only trigger sync banner when user explicitly signs in (NOT on page load/INITIAL_SESSION)
             if (event === 'SIGNED_IN') {
               setSyncing(true);
               try {
                 const synced = await syncLocalTransactionsToSupabase(session.user.id);
                 setTransactions(synced);
-                showToast('Account connected! Synced transactions with cloud.', 'success', 3000);
               } catch (err: any) {
-                console.error('Auto-sync failed on login:', err);
-                showToast('Signed in, but cloud sync encountered an issue.', 'warning', 3500);
+                console.error('[Supabase Sync]:', err);
               } finally {
                 setSyncing(false);
               }
@@ -131,7 +102,6 @@ export function useTransactions() {
           } else if (event === 'SIGNED_OUT') {
             setIsAuthenticated(false);
             setTransactions(getLocalTransactions());
-            showToast('Logged out. Using local device storage.', 'info', 3000);
           }
         }
       );
@@ -140,16 +110,18 @@ export function useTransactions() {
         authListener?.subscription?.unsubscribe();
       };
     }
-  }, [loadData, showToast]);
+  }, [loadData]);
 
   // Add Transaction Handler
   const addNewTransaction = async (formData: TransactionFormData): Promise<Transaction> => {
     try {
       const created = await addTransaction(formData);
       setTransactions((prev) => [created, ...prev.filter((t) => t.id !== created.id)]);
+      showToast('Transaction added successfully.', 'success', 2500);
       return created;
     } catch (err: any) {
-      showToast('Failed to add transaction: ' + (err.message || 'Unknown error'), 'error', 4000);
+      console.error('Failed to add transaction:', err);
+      showToast('Saved locally. Cloud sync offline.', 'info', 2500);
       throw err;
     }
   };
@@ -159,9 +131,11 @@ export function useTransactions() {
     try {
       const updated = await updateTransaction(id, formData);
       setTransactions((prev) => prev.map((t) => (t.id === id ? updated : t)));
+      showToast('Transaction updated.', 'success', 2500);
       return updated;
     } catch (err: any) {
-      showToast('Failed to update transaction: ' + (err.message || 'Unknown error'), 'error', 4000);
+      console.error('Failed to update transaction:', err);
+      showToast('Updated locally.', 'info', 2500);
       throw err;
     }
   };
@@ -171,9 +145,10 @@ export function useTransactions() {
     try {
       await deleteTransaction(id);
       setTransactions((prev) => prev.filter((t) => t.id !== id));
+      showToast('Transaction deleted.', 'info', 2500);
       return true;
     } catch (err: any) {
-      showToast('Failed to delete transaction: ' + (err.message || 'Unknown error'), 'error', 4000);
+      console.error('Failed to delete transaction:', err);
       return false;
     }
   };

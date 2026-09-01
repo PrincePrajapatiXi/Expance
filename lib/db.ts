@@ -191,10 +191,8 @@ export async function syncLocalTransactionsToSupabase(userId: string): Promise<T
 
       if (insertErr) {
         console.error('[Supabase Sync Failed]:', insertErr.message, insertErr);
-        emitDBEvent('sync_error', `Could not sync local transactions to cloud: ${insertErr.message}`, insertErr);
       } else if (inserted) {
         console.log(`[Supabase Sync Success] Uploaded ${inserted.length} transactions to Supabase.`);
-        emitDBEvent('sync_success', `Synced ${inserted.length} local transactions to your cloud account.`);
       }
     }
 
@@ -251,8 +249,7 @@ export async function fetchTransactions(): Promise<Transaction[]> {
         }
 
         if (error) {
-          console.warn('[Supabase] Fetch query failed, falling back to localStorage cache:', error.message);
-          emitDBEvent('offline_mode', `Cloud sync offline: ${error.message}. Using offline cache.`);
+          console.warn('[Supabase] Fetch query failed, using localStorage cache:', error.message);
         }
       } else {
         // Guest mode: User has not signed in. Always serve from local storage!
