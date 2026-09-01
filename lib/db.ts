@@ -6,9 +6,9 @@ const PROFILE_KEY = 'expance_user_profile_v2';
 const BUDGET_KEY = 'expance_category_budgets_v1';
 
 export const DEFAULT_USER: UserProfile = {
-  id: 'user-default',
-  full_name: 'Prince Sharma',
-  email: 'prince.sharma@example.com',
+  id: 'guest-user',
+  full_name: 'Guest User',
+  email: 'guest@local',
   currency: 'INR',
   avatar_url: '',
 };

@@ -185,9 +185,15 @@ export default function Header({
     if (onProfileUpdate) onProfileUpdate(authUserProfile);
   };
 
-  const displayName = profile.full_name || 'Account Holder';
-  const displayEmail = profile.email || 'guest@expance.app';
-  const initials = getInitials(displayName, displayEmail);
+  const displayName = isAuthenticated
+    ? profile.full_name || 'Account Holder'
+    : 'Guest User';
+  const displayEmail = isAuthenticated
+    ? profile.email || ''
+    : 'Local Storage Mode';
+  const initials = isAuthenticated
+    ? getInitials(profile.full_name, profile.email)
+    : 'G';
 
   return (
     <>
@@ -250,7 +256,7 @@ export default function Header({
               >
                 <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-600 p-0.5 shadow-sm">
                   <div className="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-white font-extrabold text-xs overflow-hidden">
-                    {profile.avatar_url && !imgError ? (
+                    {isAuthenticated && profile.avatar_url && !imgError ? (
                       <img
                         src={profile.avatar_url}
                         alt={displayName}
@@ -272,7 +278,7 @@ export default function Header({
                     <div className="flex items-center gap-2.5">
                       <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-400 via-rose-400 to-indigo-600 p-0.5 shadow-xs shrink-0">
                         <div className="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-white font-extrabold text-xs overflow-hidden">
-                          {profile.avatar_url && !imgError ? (
+                          {isAuthenticated && profile.avatar_url && !imgError ? (
                             <img
                               src={profile.avatar_url}
                               alt={displayName}
