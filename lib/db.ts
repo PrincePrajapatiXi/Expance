@@ -13,17 +13,7 @@ export const DEFAULT_USER: UserProfile = {
   avatar_url: '',
 };
 
-export const DEFAULT_BUDGETS: Record<string, number> = {
-  'Food & Dining': 6000,
-  'Shopping': 4000,
-  'Bills & Utilities': 3500,
-  'Rent & Housing': 25000,
-  'Travel & Transport': 3000,
-  'Education': 2000,
-  'Health & Fitness': 2500,
-  'Gift & Donation': 2000,
-  'Other / Misc': 2000,
-};
+export const DEFAULT_BUDGETS: Record<string, number> = {};
 
 // Event emitter for UI Toast / Notification feedback
 export type DBEventType = 'insert_error' | 'sync_success' | 'sync_error' | 'offline_mode';
@@ -553,6 +543,7 @@ export async function saveCategoryBudget(category: string, monthlyBudget: number
 
   if (typeof window !== 'undefined') {
     localStorage.setItem(BUDGET_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new CustomEvent('expance:budget_updated', { detail: updated }));
   }
 
   if (isSupabaseConfigured && supabase) {
@@ -571,3 +562,8 @@ export async function saveCategoryBudget(category: string, monthlyBudget: number
     }
   }
 }
+
+export async function saveOverallMonthlyBudget(amount: number): Promise<void> {
+  await saveCategoryBudget('__TOTAL__', amount);
+}
+

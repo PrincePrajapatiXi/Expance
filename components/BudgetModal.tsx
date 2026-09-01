@@ -20,7 +20,7 @@ export default function BudgetModal({
   currentBudget,
   onSave,
 }: BudgetModalProps) {
-  const [budgetAmount, setBudgetAmount] = useState<number>(currentBudget || 5000);
+  const [budgetAmount, setBudgetAmount] = useState<number>(currentBudget || 0);
   const meta = getCategoryMeta(category);
 
   const handleSubmit = (e: React.FormEvent) => {

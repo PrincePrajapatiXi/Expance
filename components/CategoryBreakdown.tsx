@@ -12,6 +12,7 @@ import {
   Edit3,
   ShieldCheck,
   ShieldAlert,
+  Target,
 } from 'lucide-react';
 import BudgetModal from './BudgetModal';
 
@@ -27,6 +28,22 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
 
   useEffect(() => {
     fetchCategoryBudgets().then(setBudgets);
+
+    const handleBudgetUpdate = (e: Event) => {
+      const customEvent = e as CustomEvent<Record<string, number>>;
+      if (customEvent.detail) {
+        setBudgets(customEvent.detail);
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('expance:budget_updated', handleBudgetUpdate);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('expance:budget_updated', handleBudgetUpdate);
+      }
+    };
   }, []);
 
   const handleSaveBudget = async (category: string, amount: number) => {
@@ -51,31 +68,37 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
     }
     categoryTotals[tx.category].count += 1;
     if (tx.type === 'income') {
-      categoryTotals[tx.category].income += tx.amount;
+      categoryTotals[tx.category].income += Number(tx.amount) || 0;
     } else {
-      categoryTotals[tx.category].expense += tx.amount;
+      categoryTotals[tx.category].expense += Number(tx.amount) || 0;
     }
   });
 
   const totalExpenseSum = transactions
     .filter((t) => t.type === 'expense')
-    .reduce((sum, t) => sum + t.amount, 0);
+    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
   // Convert to array
   const categoryList = Object.entries(categoryTotals)
-    .filter(([name, val]) => val.expense > 0 || val.income > 0 || budgets[name])
+    .filter(([name, val]) => val.expense > 0 || val.income > 0 || (budgets[name] && budgets[name] > 0))
     .map(([name, val]) => {
-      const budgetLimit = budgets[name] || 5000;
-      const percentOfBudget = budgetLimit > 0 ? (val.expense / budgetLimit) * 100 : 0;
+      const budgetLimit = budgets[name] ? Number(budgets[name]) : 0;
+      const hasLimit = budgetLimit > 0;
+      const percentOfBudget = hasLimit ? (val.expense / budgetLimit) * 100 : 0;
 
-      // Color coding: Green < 80%, Yellow 80-99%, Red >= 100%
+      // Color coding: Green < 80%, Yellow 80-99%, Red >= 100%, Gray if Not Set
       let budgetColorClass = 'bg-emerald-500';
       let budgetStatusText = 'On Track';
       let badgeColor = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300';
       let badgeIcon: React.ReactNode = <CheckCircle className="w-3 h-3" />;
       let badgeAnimation = '';
 
-      if (percentOfBudget >= 100) {
+      if (!hasLimit) {
+        budgetColorClass = 'bg-indigo-500/40 dark:bg-indigo-600/40';
+        budgetStatusText = 'No Limit';
+        badgeColor = 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700';
+        badgeIcon = <Target className="w-3 h-3" />;
+      } else if (percentOfBudget >= 100) {
         budgetColorClass = 'bg-rose-500';
         budgetStatusText = 'Over Budget!';
         badgeColor = 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800';
@@ -95,6 +118,7 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
         expense: val.expense,
         count: val.count,
         budgetLimit,
+        hasLimit,
         percentOfBudget,
         budgetColorClass,
         budgetStatusText,
@@ -114,7 +138,7 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
   useEffect(() => {
     if (!onBudgetAlert) return;
     categoryList.forEach((item) => {
-      if (item.percentOfBudget >= 100 && !alertedCategoriesRef.current.has(item.name)) {
+      if (item.hasLimit && item.percentOfBudget >= 100 && !alertedCategoriesRef.current.has(item.name)) {
         alertedCategoriesRef.current.add(item.name);
         onBudgetAlert(item.name, Math.round(item.percentOfBudget));
       }
@@ -148,7 +172,7 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
       ) : (
         <div className="space-y-3.5">
           {categoryList.map((item) => {
-            const isOverBudget = item.expense > item.budgetLimit;
+            const isOverBudget = item.hasLimit && item.expense > item.budgetLimit;
             const remaining = Math.max(0, item.budgetLimit - item.expense);
 
             return (
@@ -157,7 +181,7 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
                 className={`p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border space-y-2.5 transition-all hover:shadow-2xs ${
                   isOverBudget
                     ? 'border-rose-200 dark:border-rose-900/60'
-                    : item.percentOfBudget >= 80
+                    : item.hasLimit && item.percentOfBudget >= 80
                     ? 'border-amber-200 dark:border-amber-900/60'
                     : 'border-slate-100 dark:border-slate-800'
                 }`}
@@ -195,7 +219,7 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
                         {formatINR(item.expense)}
                       </span>
                       <span className="text-[10px] font-semibold text-slate-400 block">
-                        Limit: {formatINR(item.budgetLimit)}
+                        {item.hasLimit ? `Limit: ${formatINR(item.budgetLimit)}` : 'Limit: Not Set'}
                       </span>
                     </div>
 
@@ -213,7 +237,11 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
                 <div>
                   <div className="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1">
                     <span>
-                      {isOverBudget ? (
+                      {!item.hasLimit ? (
+                        <span className="text-slate-400 dark:text-slate-500 flex items-center gap-1">
+                          <Target className="w-3 h-3 text-indigo-500" /> Click edit icon to set limit
+                        </span>
+                      ) : isOverBudget ? (
                         <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
                           <ShieldAlert className="w-3 h-3" /> Exceeded by {formatINR(item.expense - item.budgetLimit)}
                         </span>
@@ -223,17 +251,19 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
                         </span>
                       )}
                     </span>
-                    <span>{item.percentOfBudget.toFixed(1)}% of budget</span>
+                    <span>
+                      {item.hasLimit ? `${item.percentOfBudget.toFixed(1)}% of budget` : `${formatINR(item.expense)} spent`}
+                    </span>
                   </div>
 
-                  {/* Visual Progress Bar with color transitions: Green <80%, Yellow 80-99%, Red >=100% */}
+                  {/* Visual Progress Bar */}
                   <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div
                       className={`h-full rounded-full transition-all duration-500 ${item.budgetColorClass} ${
                         isOverBudget ? 'shadow-[0_0_8px_rgba(239,68,68,0.3)]' : ''
                       }`}
                       style={{
-                        width: `${Math.min(item.percentOfBudget, 100)}%`,
+                        width: item.hasLimit ? `${Math.min(item.percentOfBudget, 100)}%` : item.expense > 0 ? '100%' : '0%',
                       }}
                     />
                   </div>
@@ -250,7 +280,7 @@ export default function CategoryBreakdown({ transactions, onBudgetAlert }: Categ
           isOpen={Boolean(editingCategory)}
           onClose={() => setEditingCategory(null)}
           category={editingCategory}
-          currentBudget={budgets[editingCategory] || 5000}
+          currentBudget={budgets[editingCategory] || 0}
           onSave={handleSaveBudget}
         />
       )}
