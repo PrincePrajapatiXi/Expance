@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Cloud, CloudOff, RefreshCw, AlertTriangle, CheckCircle2, Info, X, Download, FileSpreadsheet, FileText, ChevronDown } from 'lucide-react';
 import { Transaction, FilterOptions, TransactionFormData } from '@/lib/types';
 import { calculateSummaryStats } from '@/lib/db';
-import { exportTransactionsToCSV, exportTransactionsToExcel } from '@/lib/export';
+import { exportTransactionsToCSV, exportTransactionsToExcel, exportTransactionsToPDF } from '@/lib/export';
 import { useTransactions } from '@/hooks/useTransactions';
 import Header from '@/components/Header';
 import DesktopNav from '@/components/DesktopNav';
@@ -13,6 +13,7 @@ import FilterBar from '@/components/FilterBar';
 import TransactionList from '@/components/TransactionList';
 import TransactionModal from '@/components/TransactionModal';
 import BottomNav from '@/components/BottomNav';
+import BudgetSummaryCard from '@/components/BudgetSummaryCard';
 import PWAInstallPrompt from '@/components/PWAInstallPrompt';
 
 export default function Dashboard() {
@@ -170,6 +171,23 @@ export default function Dashboard() {
   };
 
   // Export Handlers
+  const handleExportPDF = async () => {
+    setIsExportOpen(false);
+    if (filteredTransactions.length === 0) {
+      showToast('No transactions to export for this month.', 'warning');
+      return;
+    }
+    setIsExporting(true);
+    try {
+      await exportTransactionsToPDF(filteredTransactions, selectedMonth);
+      showToast(`Exported ${filteredTransactions.length} transactions as PDF statement.`, 'success');
+    } catch {
+      showToast('Failed to export PDF. Please try again.', 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const handleExportCSV = () => {
     setIsExportOpen(false);
     if (filteredTransactions.length === 0) {
@@ -187,7 +205,7 @@ export default function Dashboard() {
     }
   };
 
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     setIsExportOpen(false);
     if (filteredTransactions.length === 0) {
       showToast('No transactions to export for this month.', 'warning');
@@ -195,7 +213,7 @@ export default function Dashboard() {
     }
     setIsExporting(true);
     try {
-      exportTransactionsToExcel(filteredTransactions, selectedMonth);
+      await exportTransactionsToExcel(filteredTransactions, selectedMonth);
       showToast(`Exported ${filteredTransactions.length} transactions as Excel.`, 'success');
     } catch {
       showToast('Failed to export Excel. Please try again.', 'error');
@@ -205,7 +223,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-24">
+    <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-24">
       {/* PWA Install Banner */}
       <PWAInstallPrompt />
 
@@ -215,7 +233,7 @@ export default function Dashboard() {
         onMonthChange={setSelectedMonth}
       />
 
-      <main className="max-w-4xl mx-auto px-4 pt-2">
+      <main className="max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">
         {/* Floating Toast Notification Banner */}
         {toast && (
           <div className="mb-4 animate-in fade-in slide-in-from-top-3 duration-200">
@@ -316,28 +334,41 @@ export default function Dashboard() {
                   <div className="py-1 px-1">
                     <button
                       type="button"
-                      onClick={handleExportCSV}
-                      className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-colors cursor-pointer text-left group"
+                      onClick={handleExportPDF}
+                      className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors cursor-pointer text-left group"
                     >
-                      <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
+                      <div className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 group-hover:scale-110 transition-transform">
                         <FileText className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <p className="font-bold">CSV File</p>
-                        <p className="text-[10px] text-slate-400 font-medium">Compatible with all apps</p>
+                        <p className="font-bold text-rose-950 dark:text-rose-200">PDF Statement</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Styled colorful PDF</p>
                       </div>
                     </button>
                     <button
                       type="button"
                       onClick={handleExportExcel}
-                      className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-colors cursor-pointer text-left group"
+                      className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-xl transition-colors cursor-pointer text-left group"
                     >
-                      <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                      <div className="p-1.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform">
                         <FileSpreadsheet className="w-3.5 h-3.5" />
                       </div>
                       <div>
-                        <p className="font-bold">Excel (.xlsx)</p>
-                        <p className="text-[10px] text-slate-400 font-medium">Microsoft Excel format</p>
+                        <p className="font-bold text-emerald-950 dark:text-emerald-200">Excel (.xlsx)</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Styled workbook with stats</p>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleExportCSV}
+                      className="flex items-center gap-2.5 w-full px-3 py-2.5 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 rounded-xl transition-colors cursor-pointer text-left group"
+                    >
+                      <div className="p-1.5 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform">
+                        <FileText className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <p className="font-bold">CSV File</p>
+                        <p className="text-[10px] text-slate-400 font-medium">Compatible with all apps</p>
                       </div>
                     </button>
                   </div>
@@ -352,6 +383,9 @@ export default function Dashboard() {
 
         {/* Summary KPI Cards */}
         <KPICards stats={stats} />
+
+        {/* Monthly Budget vs Spent Summary */}
+        <BudgetSummaryCard transactions={filteredTransactions} />
 
         {/* Filter and Search Bar */}
         <FilterBar

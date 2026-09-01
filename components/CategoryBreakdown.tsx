@@ -1,19 +1,29 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Transaction } from '@/lib/types';
 import { formatINR, getCategoryMeta, CATEGORIES } from '@/lib/utils';
 import { fetchCategoryBudgets, saveCategoryBudget } from '@/lib/db';
-import { PieChart as CategoryIcon, Target, AlertTriangle, CheckCircle, Edit3 } from 'lucide-react';
+import {
+  PieChart as CategoryIcon,
+  AlertTriangle,
+  AlertCircle,
+  CheckCircle,
+  Edit3,
+  ShieldCheck,
+  ShieldAlert,
+} from 'lucide-react';
 import BudgetModal from './BudgetModal';
 
 interface CategoryBreakdownProps {
   transactions: Transaction[];
+  onBudgetAlert?: (category: string, percent: number) => void;
 }
 
-export default function CategoryBreakdown({ transactions }: CategoryBreakdownProps) {
+export default function CategoryBreakdown({ transactions, onBudgetAlert }: CategoryBreakdownProps) {
   const [budgets, setBudgets] = useState<Record<string, number>>({});
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
+  const alertedCategoriesRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     fetchCategoryBudgets().then(setBudgets);
@@ -23,6 +33,8 @@ export default function CategoryBreakdown({ transactions }: CategoryBreakdownPro
     await saveCategoryBudget(category, amount);
     setBudgets((prev) => ({ ...prev, [category]: amount }));
     setEditingCategory(null);
+    // Reset alert so new threshold can trigger again
+    alertedCategoriesRef.current.delete(category);
   };
 
   // Group transactions by category
@@ -56,19 +68,25 @@ export default function CategoryBreakdown({ transactions }: CategoryBreakdownPro
       const budgetLimit = budgets[name] || 5000;
       const percentOfBudget = budgetLimit > 0 ? (val.expense / budgetLimit) * 100 : 0;
 
-      // Color coding: Green < 70%, Yellow 70-90%, Red > 90%
+      // Color coding: Green < 80%, Yellow 80-99%, Red >= 100%
       let budgetColorClass = 'bg-emerald-500';
       let budgetStatusText = 'On Track';
       let badgeColor = 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300';
+      let badgeIcon: React.ReactNode = <CheckCircle className="w-3 h-3" />;
+      let badgeAnimation = '';
 
-      if (percentOfBudget > 90) {
+      if (percentOfBudget >= 100) {
         budgetColorClass = 'bg-rose-500';
-        budgetStatusText = percentOfBudget > 100 ? 'Over Budget' : 'Critical';
-        badgeColor = 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300';
-      } else if (percentOfBudget >= 70) {
+        budgetStatusText = 'Over Budget!';
+        badgeColor = 'bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border border-rose-200 dark:border-rose-800';
+        badgeIcon = <AlertCircle className="w-3 h-3" />;
+        badgeAnimation = 'animate-pulse-danger';
+      } else if (percentOfBudget >= 80) {
         budgetColorClass = 'bg-amber-500';
-        budgetStatusText = 'Caution';
-        badgeColor = 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300';
+        budgetStatusText = 'Warning';
+        badgeColor = 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800';
+        badgeIcon = <AlertTriangle className="w-3 h-3" />;
+        badgeAnimation = 'animate-pulse-warning';
       }
 
       return {
@@ -81,6 +99,8 @@ export default function CategoryBreakdown({ transactions }: CategoryBreakdownPro
         budgetColorClass,
         budgetStatusText,
         badgeColor,
+        badgeIcon,
+        badgeAnimation,
         meta: getCategoryMeta(name),
         shareOfExpense:
           totalExpenseSum > 0 ? ((val.expense / totalExpenseSum) * 100).toFixed(1) : '0',
@@ -90,8 +110,19 @@ export default function CategoryBreakdown({ transactions }: CategoryBreakdownPro
   // Sort by highest expense first
   categoryList.sort((a, b) => b.expense - a.expense);
 
+  // Fire toast alerts for categories that exceed 100% (only once per category)
+  useEffect(() => {
+    if (!onBudgetAlert) return;
+    categoryList.forEach((item) => {
+      if (item.percentOfBudget >= 100 && !alertedCategoriesRef.current.has(item.name)) {
+        alertedCategoriesRef.current.add(item.name);
+        onBudgetAlert(item.name, Math.round(item.percentOfBudget));
+      }
+    });
+  }, [categoryList, onBudgetAlert]);
+
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs my-4 space-y-4">
+    <div className="bg-white dark:bg-slate-900 rounded-3xl p-4 sm:p-5 border border-slate-200/80 dark:border-slate-800 shadow-xs my-4 space-y-4 min-w-0 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
         <div className="flex items-center gap-2">
@@ -123,7 +154,13 @@ export default function CategoryBreakdown({ transactions }: CategoryBreakdownPro
             return (
               <div
                 key={item.name}
-                className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 space-y-2.5 transition-all hover:shadow-2xs"
+                className={`p-4 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border space-y-2.5 transition-all hover:shadow-2xs ${
+                  isOverBudget
+                    ? 'border-rose-200 dark:border-rose-900/60'
+                    : item.percentOfBudget >= 80
+                    ? 'border-amber-200 dark:border-amber-900/60'
+                    : 'border-slate-100 dark:border-slate-800'
+                }`}
               >
                 {/* Category Header Row */}
                 <div className="flex items-center justify-between">
@@ -139,8 +176,9 @@ export default function CategoryBreakdown({ transactions }: CategoryBreakdownPro
                           {item.name}
                         </h4>
                         <span
-                          className={`px-2 py-0.2 rounded-full text-[9px] font-extrabold ${item.badgeColor}`}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-extrabold ${item.badgeColor} ${item.badgeAnimation}`}
                         >
+                          {item.badgeIcon}
                           {item.budgetStatusText}
                         </span>
                       </div>
@@ -177,21 +215,23 @@ export default function CategoryBreakdown({ transactions }: CategoryBreakdownPro
                     <span>
                       {isOverBudget ? (
                         <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3" /> Exceeded by {formatINR(item.expense - item.budgetLimit)}
+                          <ShieldAlert className="w-3 h-3" /> Exceeded by {formatINR(item.expense - item.budgetLimit)}
                         </span>
                       ) : (
                         <span className="text-emerald-700 dark:text-emerald-400 flex items-center gap-1">
-                          <CheckCircle className="w-3 h-3" /> {formatINR(remaining)} remaining
+                          <ShieldCheck className="w-3 h-3" /> {formatINR(remaining)} remaining
                         </span>
                       )}
                     </span>
                     <span>{item.percentOfBudget.toFixed(1)}% of budget</span>
                   </div>
 
-                  {/* Visual Progress Bar with color transitions: Green <70%, Yellow 70-90%, Red >90% */}
+                  {/* Visual Progress Bar with color transitions: Green <80%, Yellow 80-99%, Red >=100% */}
                   <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full transition-all duration-500 ${item.budgetColorClass}`}
+                      className={`h-full rounded-full transition-all duration-500 ${item.budgetColorClass} ${
+                        isOverBudget ? 'shadow-[0_0_8px_rgba(239,68,68,0.3)]' : ''
+                      }`}
                       style={{
                         width: `${Math.min(item.percentOfBudget, 100)}%`,
                       }}

@@ -11,7 +11,7 @@ interface KPICardsProps {
 
 export default function KPICards({ stats }: KPICardsProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 my-4">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4 min-w-0">
       {/* Total Income Card */}
       <div
         className="rounded-2xl p-4 shadow-sm transition-all hover:shadow-md border border-emerald-200/60"

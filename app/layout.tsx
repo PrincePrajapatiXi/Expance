@@ -32,8 +32,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
-      <body className={`${inter.className} min-h-full bg-slate-50 dark:bg-slate-950 font-sans`}>
+    <html lang="en" className={`${inter.variable} h-full antialiased overflow-x-hidden`}>
+      <body className={`${inter.className} min-h-full w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 font-sans`}>
         {children}
         <script
           dangerouslySetInnerHTML={{

@@ -76,7 +76,7 @@ export default function TransactionCard({
               </h3>
             </div>
 
-            <div className="flex items-center gap-2 mt-0.5">
+            <div className="flex items-center gap-2 mt-0.5 flex-wrap">
               <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate">
                 {transaction.category}
               </span>

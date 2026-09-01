@@ -177,7 +177,7 @@ export default function ChartsSection({ transactions }: ChartsSectionProps) {
         {barData.length > 0 ? (
           <div className="h-72 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <BarChart data={barData} margin={{ top: 10, right: 5, left: -10, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                 <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#64748B' }} />
                 <YAxis tick={{ fontSize: 10, fill: '#64748B' }} />

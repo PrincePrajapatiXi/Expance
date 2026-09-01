@@ -40,7 +40,7 @@ export default function FilterBar({
   ];
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-2xl p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-xs mb-4 space-y-3">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-xs mb-4 space-y-3 min-w-0 overflow-hidden">
       {/* Top Search Input & Reset Button */}
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
@@ -75,7 +75,7 @@ export default function FilterBar({
       </div>
 
       {/* Type Toggle & Date Range Pills */}
-      <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5 pt-1">
         {/* Type Toggle (All, Income, Expense) */}
         <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
           <button
@@ -111,7 +111,7 @@ export default function FilterBar({
         </div>
 
         {/* Date Range Selector Pills */}
-        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5 min-w-0">
           {dateOptions.map((opt) => (
             <button
               key={opt.id}
@@ -161,7 +161,7 @@ export default function FilterBar({
       )}
 
       {/* Payment Mode Filter Pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 min-w-0">
         <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0 mr-1 flex items-center gap-1">
           <CreditCard className="w-3 h-3" /> Mode:
         </span>
@@ -187,7 +187,7 @@ export default function FilterBar({
       </div>
 
       {/* Category Filter Pills */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 min-w-0">
         <span className="text-[10px] font-bold uppercase text-slate-400 shrink-0 mr-1">
           Category:
         </span>
