@@ -13,7 +13,6 @@ import TransactionList from '@/components/TransactionList';
 import TransactionModal from '@/components/TransactionModal';
 import BudgetSummaryCard from '@/components/BudgetSummaryCard';
 import BottomNav from '@/components/BottomNav';
-import PWAInstallPrompt from '@/components/PWAInstallPrompt';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Dashboard() {
@@ -141,9 +140,6 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-24">
-      {/* PWA Install Banner */}
-      <PWAInstallPrompt />
-
       {/* Top Header Bar */}
       <Header
         selectedMonth={selectedMonth}
