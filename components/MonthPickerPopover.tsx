@@ -9,6 +9,7 @@ import {
   Sparkles,
   Check,
 } from 'lucide-react';
+import { triggerHaptic } from '@/lib/utils';
 
 interface MonthPickerPopoverProps {
   selectedMonth: string; // Format: YYYY-MM or '' for all
@@ -113,21 +114,24 @@ export default function MonthPickerPopover({
     <div className="relative" ref={popoverRef}>
       {/* Trigger Button */}
       <button
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={() => {
+          triggerHaptic(10);
+          setIsOpen((prev) => !prev);
+        }}
         type="button"
-        className="flex items-center gap-2 bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-1.5 border border-slate-200/80 dark:border-slate-700 shadow-2xs transition-all active:scale-95 cursor-pointer"
+        className="flex items-center gap-1.5 sm:gap-2 bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-100 rounded-xl px-2.5 sm:px-3 py-1.5 border border-slate-200/80 dark:border-slate-700 shadow-2xs transition-transform duration-100 ease-out active:scale-95 cursor-pointer select-none max-w-[170px] sm:max-w-none"
         aria-label="Select month and year"
         aria-expanded={isOpen}
       >
-        <Calendar className="w-4 h-4 text-indigo-700 dark:text-indigo-400 shrink-0" />
-        <span className="text-xs font-bold tracking-tight whitespace-nowrap">
+        <Calendar className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-indigo-700 dark:text-indigo-400 shrink-0" />
+        <span className="text-[11px] sm:text-xs font-bold tracking-tight truncate whitespace-nowrap">
           {getDisplayLabel()}
         </span>
       </button>
 
       {/* Modern Popover Grid Modal */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
           {/* Popover Header: Year Navigator */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <button

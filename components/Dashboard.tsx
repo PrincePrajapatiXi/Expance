@@ -140,14 +140,14 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-24">
+    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-24">
       {/* Top Header Bar */}
       <Header
         selectedMonth={selectedMonth}
         onMonthChange={setSelectedMonth}
       />
 
-      <main className="relative z-10 max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">
+      <main className="relative z-10 max-w-4xl mx-auto w-full max-w-full overflow-x-hidden px-3 sm:px-4 lg:px-6 pt-2">
         {/* Desktop Navigation Tabs */}
         <DesktopNav onQuickAdd={() => { setEditingTx(null); setIsModalOpen(true); }} />
 

@@ -41,10 +41,14 @@
 /* 1. Native Mobile Touch & Scroll Physics */
 html,
 body {
+  overflow-x: hidden;
+  max-width: 100%;
+  width: 100%;
+  position: relative;
   overscroll-behavior-y: none;
   overscroll-behavior-x: none;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
+  touch-action: pan-y;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
 }
 
