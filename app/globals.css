@@ -41,8 +41,7 @@
 /* 1. Native Mobile Touch & Scroll Physics */
 html,
 body {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100%;
   width: 100%;
   max-width: 100%;
   position: relative;

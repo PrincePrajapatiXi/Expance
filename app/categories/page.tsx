@@ -54,7 +54,7 @@ export default function CategoriesPage() {
   };
 
   return (
-    <div className="min-h-screen w-full max-w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 pb-24">
+    <div className="w-full min-h-screen overflow-x-hidden overflow-y-auto pb-28 bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100">
       <Header selectedMonth={selectedMonth} onMonthChange={setSelectedMonth} />
 
       <main className="max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">

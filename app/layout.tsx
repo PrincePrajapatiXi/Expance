@@ -32,15 +32,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} min-h-screen w-full max-w-full overflow-x-hidden overflow-y-auto antialiased relative`}>
-      <body className={`${inter.className} min-h-screen w-full max-w-full overflow-x-hidden overflow-y-auto relative bg-slate-50 dark:bg-slate-950 font-sans`}>
+    <html lang="en" className={`${inter.variable} min-h-screen w-full overflow-x-hidden antialiased`}>
+      <body className={`${inter.className} min-h-screen w-full overflow-x-hidden bg-slate-50 dark:bg-slate-950 font-sans`}>
         {children}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               if ('serviceWorker' in navigator) {
                 window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').catch(function(err) {
+                  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                    reg.update();
+                  }).catch(function(err) {
                     console.log('SW registration failed: ', err);
                   });
                 });
@@ -52,3 +54,4 @@ export default function RootLayout({
     </html>
   );
 }
+

@@ -98,6 +98,8 @@ export default function TransactionModal({
     { id: 'Net Banking', label: '🏦 Net Banking' },
   ];
 
+  if (!isOpen) return null;
+
   return (
     <AnimatePresence>
       {isOpen && (
