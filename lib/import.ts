@@ -315,9 +315,34 @@ export function processRawRows(rawRows: Record<string, any>[]): ImportResult {
   };
 }
 
-// Client-side parser supporting CSV (PapaParse) & XLSX/XLS (SheetJS)
+// Client-side parser supporting CSV (PapaParse) & XLSX/XLS/XLSM (SheetJS)
 export async function parseTransactionFile(file: File): Promise<ImportResult> {
-  const isCsv = file.name.toLowerCase().endsWith('.csv') || file.type.includes('csv');
+  const fileName = file.name.toLowerCase();
+  const isCsv = fileName.endsWith('.csv') || file.type.includes('csv');
+  const isExcel =
+    fileName.endsWith('.xlsx') ||
+    fileName.endsWith('.xls') ||
+    fileName.endsWith('.xlsm') ||
+    file.type.includes('spreadsheet') ||
+    file.type.includes('excel') ||
+    file.type.includes('macroenabled');
+
+  if (!isCsv && !isExcel) {
+    return {
+      addedCount: 0,
+      transactions: [],
+      errors: ['Unsupported file format. Please upload a .csv, .xlsx, .xls, or .xlsm file.'],
+      summary: {
+        totalCount: 0,
+        totalIncome: 0,
+        totalExpense: 0,
+        incomeCount: 0,
+        expenseCount: 0,
+        dateRange: null,
+        categories: [],
+      },
+    };
+  }
 
   if (isCsv) {
     return new Promise((resolve, reject) => {
@@ -344,7 +369,7 @@ export async function parseTransactionFile(file: File): Promise<ImportResult> {
     });
   }
 
-  // Excel (.xlsx, .xls) parsing
+  // Excel (.xlsx, .xls, .xlsm macro-enabled) parsing
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 

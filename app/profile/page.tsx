@@ -643,7 +643,7 @@ export default function ProfilePage() {
           <input
             ref={cardFileInputRef}
             type="file"
-            accept=".csv, .xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+            accept=".csv, .xlsx, .xls, .xlsm, text/csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel.sheet.macroEnabled.12"
             onChange={(e) => {
               if (e.target.files?.[0]) {
                 setStagedFile(e.target.files[0]);
@@ -700,6 +700,9 @@ export default function ProfilePage() {
                     </span>
                     <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400">
                       .xlsx
+                    </span>
+                    <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400">
+                      .xlsm
                     </span>
                     <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-400">
                       .xls

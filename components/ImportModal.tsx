@@ -163,7 +163,7 @@ export default function ImportModal({
           <input
             ref={fileInputRef}
             type="file"
-            accept=".csv, .xlsx, .xls, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+            accept=".csv, .xlsx, .xls, .xlsm, text/csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel.sheet.macroEnabled.12"
             onChange={(e) => {
               if (e.target.files?.[0]) {
                 handleProcessFile(e.target.files[0]);
@@ -210,6 +210,9 @@ export default function ImportModal({
                     </span>
                     <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 border border-slate-200 dark:border-slate-700 shadow-2xs">
                       .xlsx
+                    </span>
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 border border-slate-200 dark:border-slate-700 shadow-2xs">
+                      .xlsm
                     </span>
                     <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white dark:bg-slate-900 text-indigo-700 dark:text-indigo-300 border border-slate-200 dark:border-slate-700 shadow-2xs">
                       .xls
