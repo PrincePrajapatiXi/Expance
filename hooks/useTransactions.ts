@@ -112,6 +112,26 @@ export function useTransactions() {
     }
   }, [loadData]);
 
+  // Real-time synchronization across tabs and components
+  useEffect(() => {
+    const handleTxUpdate = (event: any) => {
+      if (event?.detail && Array.isArray(event.detail)) {
+        setTransactions(event.detail);
+      } else {
+        const local = getLocalTransactions();
+        setTransactions(local);
+      }
+    };
+
+    window.addEventListener('expance:transactions_updated', handleTxUpdate);
+    window.addEventListener('storage', handleTxUpdate);
+
+    return () => {
+      window.removeEventListener('expance:transactions_updated', handleTxUpdate);
+      window.removeEventListener('storage', handleTxUpdate);
+    };
+  }, []);
+
   // Add Transaction Handler
   const addNewTransaction = async (formData: TransactionFormData): Promise<Transaction> => {
     try {

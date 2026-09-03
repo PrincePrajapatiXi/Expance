@@ -32,6 +32,8 @@ export function formatINR(amount: number, showSign = false): string {
   return formatted;
 }
 
+export const formatCurrency = formatINR;
+
 // 12-hour formatted timestamp: YYYY-MM-DD hh:mm A
 export function format12HourDateTime(dateInput: string | Date | number): string {
   const date = new Date(dateInput);

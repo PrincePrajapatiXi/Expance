@@ -331,7 +331,14 @@ export async function addTransaction(formData: TransactionFormData): Promise<Tra
   const currentLocal = getLocalTransactions();
   const updatedLocal = [newTx, ...currentLocal.filter((t) => t.id !== newTx.id)];
   saveLocalTransactions(updatedLocal);
+  notifyTransactionsUpdated(updatedLocal);
   return newTx;
+}
+
+export function notifyTransactionsUpdated(transactions?: Transaction[]) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('expance:transactions_updated', { detail: transactions }));
+  }
 }
 
 // 3. Bulk Add (for Excel/CSV Import)
@@ -339,14 +346,16 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
   if (!importedList.length) return [];
 
   const currentLocal = getLocalTransactions();
-  const combinedLocal = [...importedList.map(normalizeTransaction), ...currentLocal];
+  const normalizedImported = importedList.map(normalizeTransaction);
+  const combinedLocal = [...normalizedImported, ...currentLocal];
   saveLocalTransactions(combinedLocal);
+  notifyTransactionsUpdated(combinedLocal);
 
   if (isSupabaseConfigured && supabase) {
     try {
       const authUser = await getAuthUser();
       if (authUser) {
-        const payload = importedList.map((t) => ({
+        const payload = normalizedImported.map((t) => ({
           user_id: authUser.id,
           type: t.type,
           category: t.category,
@@ -369,6 +378,7 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
           const remoteNormalized = data.map(normalizeTransaction);
           const finalMerged = [...remoteNormalized, ...currentLocal];
           saveLocalTransactions(finalMerged);
+          notifyTransactionsUpdated(finalMerged);
           return remoteNormalized;
         }
       }
@@ -377,7 +387,7 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
     }
   }
 
-  return importedList;
+  return normalizedImported;
 }
 
 // 4. Update Transaction
@@ -405,6 +415,7 @@ export async function updateTransaction(id: string, formData: TransactionFormDat
 
   const updatedList = current.map((tx) => (tx.id === id ? updatedTx : tx));
   saveLocalTransactions(updatedList);
+  notifyTransactionsUpdated(updatedList);
 
   // Cloud update if authenticated
   if (isSupabaseConfigured && supabase) {
@@ -429,7 +440,9 @@ export async function updateTransaction(id: string, formData: TransactionFormDat
         if (error) {
           console.error('[Supabase Update Error]:', error.message, error);
         } else if (data) {
-          return normalizeTransaction(data);
+          const synced = normalizeTransaction(data);
+          notifyTransactionsUpdated();
+          return synced;
         }
       }
     } catch (err) {
@@ -446,6 +459,7 @@ export async function deleteTransaction(id: string): Promise<boolean> {
   const current = getLocalTransactions();
   const updated = current.filter((tx) => tx.id !== id);
   saveLocalTransactions(updated);
+  notifyTransactionsUpdated(updated);
 
   // Cloud delete if authenticated
   if (isSupabaseConfigured && supabase) {
@@ -469,6 +483,7 @@ export async function deleteTransaction(id: string): Promise<boolean> {
 export function clearAllTransactions(): Transaction[] {
   if (typeof window !== 'undefined') {
     localStorage.removeItem(STORAGE_KEY);
+    notifyTransactionsUpdated([]);
   }
   return [];
 }
