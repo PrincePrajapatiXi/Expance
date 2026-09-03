@@ -147,7 +147,7 @@ export default function Dashboard() {
         onMonthChange={setSelectedMonth}
       />
 
-      <main className="relative z-10 max-w-4xl mx-auto w-full max-w-full overflow-x-hidden px-3 sm:px-4 lg:px-6 pt-2">
+      <main className="relative z-10 max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">
         {/* Desktop Navigation Tabs */}
         <DesktopNav onQuickAdd={() => { setEditingTx(null); setIsModalOpen(true); }} />
 

@@ -159,7 +159,7 @@ export default function ProfilePage() {
         onProfileUpdate={setProfile}
       />
 
-      <main className="max-w-4xl mx-auto w-full max-w-full overflow-x-hidden px-3 sm:px-4 lg:px-6 pt-2">
+      <main className="max-w-4xl mx-auto w-full px-3 sm:px-4 lg:px-6 pt-2">
         <DesktopNav onQuickAdd={() => {}} />
 
         <div className="my-2">

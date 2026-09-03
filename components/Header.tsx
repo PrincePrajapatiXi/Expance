@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   Bell,
   Wallet,
-  Sparkles,
 } from 'lucide-react';
 import { NotificationItem, UserProfile } from '@/lib/types';
 import { triggerHaptic } from '@/lib/utils';
@@ -44,23 +43,18 @@ export default function Header({
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full max-w-full overflow-x-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 px-3.5 sm:px-6 py-2.5 sm:py-3 shadow-xs">
+      <header className="sticky top-0 z-40 w-full max-w-full overflow-x-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 pl-3.5 pr-4 sm:px-6 py-2.5 sm:py-3 shadow-xs">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 min-w-0 w-full">
-          {/* Logo & Brand */}
+          {/* Logo & Brand (No PRO badge) */}
           <Link href="/" className="flex items-center gap-2.5 group shrink-0">
             <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-indigo-900 via-indigo-800 to-blue-600 flex items-center justify-center text-white shadow-md shadow-indigo-900/20 group-hover:scale-105 transition-transform">
               <Wallet className="w-5.5 h-5.5" />
             </div>
             <div>
-              <div className="flex items-center gap-1.5">
-                <h1 className="font-extrabold text-lg text-slate-900 dark:text-white tracking-tight leading-none">
-                  Expance
-                </h1>
-                <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-900/50">
-                  <Sparkles className="w-2.5 h-2.5" /> PRO
-                </span>
-              </div>
-              <p className="text-[11px] font-medium text-slate-500 hidden sm:block">
+              <h1 className="font-extrabold text-lg text-slate-900 dark:text-white tracking-tight leading-none">
+                Expance
+              </h1>
+              <p className="text-[11px] font-medium text-slate-500 hidden sm:block mt-0.5">
                 Personal Expense & Income Tracker
               </p>
             </div>
