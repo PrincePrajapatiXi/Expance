@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { Plus, AlertTriangle, CheckCircle2, Info, X } from 'lucide-react';
 import { Transaction, FilterOptions, TransactionFormData } from '@/lib/types';
 import { calculateSummaryStats } from '@/lib/db';
+import { triggerHaptic } from '@/lib/utils';
 import { useTransactions } from '@/hooks/useTransactions';
 import Header from '@/components/Header';
 import DesktopNav from '@/components/DesktopNav';
@@ -219,10 +220,11 @@ export default function Dashboard() {
       {/* Floating Action Button (FAB) anchored bottom-right */}
       <button
         onClick={() => {
+          triggerHaptic(20);
           setEditingTx(null);
           setIsModalOpen(true);
         }}
-        className="fixed bottom-20 sm:bottom-8 right-5 z-40 w-14 h-14 rounded-full bg-indigo-900 hover:bg-indigo-950 text-white shadow-xl shadow-indigo-900/30 flex items-center justify-center transition-all hover:scale-110 active:scale-95 cursor-pointer ring-4 ring-white dark:ring-slate-900"
+        className="fixed bottom-[calc(4.75rem+env(safe-area-inset-bottom,0px))] sm:bottom-8 right-5 z-40 w-14 h-14 rounded-full bg-indigo-900 hover:bg-indigo-950 text-white shadow-xl shadow-indigo-900/35 flex items-center justify-center transition-transform duration-100 ease-out hover:scale-105 active:scale-90 cursor-pointer ring-4 ring-white dark:ring-slate-900 select-none"
         title="Add Transaction"
         aria-label="Add Transaction"
       >

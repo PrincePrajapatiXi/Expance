@@ -6,6 +6,17 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+// Lightweight native mobile haptic feedback helper
+export function triggerHaptic(duration: number = 15): void {
+  if (typeof window !== 'undefined' && 'vibrate' in navigator && typeof navigator.vibrate === 'function') {
+    try {
+      navigator.vibrate(duration);
+    } catch {
+      // Ignore if blocked by browser permission or policy
+    }
+  }
+}
+
 // Format currency into INR ₹
 export function formatINR(amount: number, showSign = false): string {
   const formatted = new Intl.NumberFormat('en-IN', {

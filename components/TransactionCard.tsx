@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import { motion, PanInfo } from 'framer-motion';
 import { Trash2, Edit2, Clock } from 'lucide-react';
 import { Transaction } from '@/lib/types';
-import { formatINR, format12HourDateTime, getCategoryMeta } from '@/lib/utils';
+import { formatINR, format12HourDateTime, getCategoryMeta, triggerHaptic } from '@/lib/utils';
 
 interface TransactionCardProps {
   transaction: Transaction;
@@ -23,10 +23,12 @@ export default function TransactionCard({
 
   const handleDragEnd = (event: any, info: PanInfo) => {
     if (info.offset.x < -80) {
-      // Swiped left far enough -> Trigger Delete
+      // Swiped left far enough -> Trigger Delete with vibration
+      triggerHaptic(20);
       onDelete(transaction.id);
     } else if (info.offset.x > 80) {
-      // Swiped right far enough -> Trigger Edit
+      // Swiped right far enough -> Trigger Edit with vibration
+      triggerHaptic(15);
       onEdit(transaction);
     }
     setDragX(0);

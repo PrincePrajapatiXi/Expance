@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, PieChart, LayoutGrid, User } from 'lucide-react';
+import { triggerHaptic } from '@/lib/utils';
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -32,7 +33,7 @@ export default function BottomNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-800 py-2 px-4 shadow-lg sm:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-lg border-t border-slate-200/80 dark:border-slate-800 pt-2 pb-[max(0.6rem,env(safe-area-inset-bottom))] px-4 shadow-lg sm:hidden select-none">
       <div className="max-w-md mx-auto flex items-center justify-around">
         {navItems.map((item) => {
           const Icon = item.icon;
@@ -42,7 +43,8 @@ export default function BottomNav() {
             <Link
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center gap-1 py-1 px-3 rounded-2xl transition-all ${
+              onClick={() => triggerHaptic(15)}
+              className={`flex flex-col items-center gap-1 py-1 px-3 rounded-2xl transition-transform duration-100 ease-out active:scale-90 select-none ${
                 isActive
                   ? 'text-indigo-900 dark:text-indigo-400 font-extrabold scale-105'
                   : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 font-medium'
@@ -55,7 +57,7 @@ export default function BottomNav() {
               >
                 <Icon className="w-5 h-5" />
               </div>
-              <span className="text-[10px] tracking-tight">{item.label}</span>
+              <span className="text-[10px] tracking-tight font-medium">{item.label}</span>
             </Link>
           );
         })}
@@ -63,3 +65,4 @@ export default function BottomNav() {
     </nav>
   );
 }
+

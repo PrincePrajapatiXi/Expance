@@ -19,6 +19,7 @@ import {
 import { NotificationItem, UserProfile } from '@/lib/types';
 import { getUserProfile, saveUserProfile, DEFAULT_USER } from '@/lib/db';
 import { supabase, isSupabaseConfigured, signOutUser, getAuthUser } from '@/lib/supabase';
+import { triggerHaptic } from '@/lib/utils';
 import NotificationModal from './NotificationModal';
 import MonthPickerPopover from './MonthPickerPopover';
 import AuthModal from './AuthModal';
@@ -230,9 +231,12 @@ export default function Header({
             {/* Notification Bell */}
             <div className="relative">
               <button
-                onClick={() => setShowNotifications(true)}
+                onClick={() => {
+                  triggerHaptic(10);
+                  setShowNotifications(true);
+                }}
                 type="button"
-                className="relative p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className="relative p-2.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 transition-transform duration-100 ease-out hover:scale-105 active:scale-90 cursor-pointer select-none"
                 aria-label="View notifications"
               >
                 <Bell className="w-4.5 h-4.5" />
@@ -248,8 +252,11 @@ export default function Header({
             <div className="relative pl-1" ref={menuRef}>
               <button
                 type="button"
-                onClick={() => setIsUserMenuOpen((prev) => !prev)}
-                className="flex items-center gap-1.5 p-0.5 rounded-full hover:ring-2 hover:ring-indigo-500/60 transition-all cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-indigo-500/60 active:scale-95"
+                onClick={() => {
+                  triggerHaptic(10);
+                  setIsUserMenuOpen((prev) => !prev);
+                }}
+                className="flex items-center gap-1.5 p-0.5 rounded-full hover:ring-2 hover:ring-indigo-500/60 transition-transform duration-100 ease-out cursor-pointer focus:outline-hidden focus:ring-2 focus:ring-indigo-500/60 active:scale-90 select-none"
                 aria-label="User profile menu"
                 aria-expanded={isUserMenuOpen}
                 title="Account & Profile Settings"

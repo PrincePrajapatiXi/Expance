@@ -11,10 +11,10 @@ interface KPICardsProps {
 
 export default function KPICards({ stats }: KPICardsProps) {
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4 min-w-0">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-4 min-w-0 select-none">
       {/* Total Income Card */}
       <div
-        className="rounded-2xl p-4 shadow-sm transition-all hover:shadow-md border border-emerald-200/60"
+        className="rounded-2xl p-4 shadow-sm transition-transform duration-100 ease-out active:scale-95 border border-emerald-200/60 cursor-pointer"
         style={{ backgroundColor: '#DCFCE7' }}
       >
         <div className="flex items-center justify-between">
@@ -45,7 +45,7 @@ export default function KPICards({ stats }: KPICardsProps) {
 
       {/* Total Expense Card */}
       <div
-        className="rounded-2xl p-4 shadow-sm transition-all hover:shadow-md border border-rose-200/60"
+        className="rounded-2xl p-4 shadow-sm transition-transform duration-100 ease-out active:scale-95 border border-rose-200/60 cursor-pointer"
         style={{ backgroundColor: '#FEE2E2' }}
       >
         <div className="flex items-center justify-between">
@@ -76,7 +76,7 @@ export default function KPICards({ stats }: KPICardsProps) {
 
       {/* Net Balance Card */}
       <div
-        className="rounded-2xl p-4 shadow-sm transition-all hover:shadow-md text-white border border-indigo-900/20"
+        className="rounded-2xl p-4 shadow-sm transition-transform duration-100 ease-out active:scale-95 text-white border border-indigo-900/20 cursor-pointer"
         style={{ backgroundColor: '#1E3A8A' }}
       >
         <div className="flex items-center justify-between">

@@ -30,7 +30,7 @@ export default function DesktopNav({ onQuickAdd }: DesktopNavProps) {
             <Link
               key={item.href}
               href={item.href}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-transform duration-100 ease-out active:scale-95 select-none flex items-center gap-2 ${
                 isActive
                   ? 'bg-indigo-900 text-white shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
