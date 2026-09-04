@@ -37,14 +37,112 @@ function generateUUID(): string {
 }
 
 // Clean string for header matching (lowercase, no spaces, no special characters)
-function normalizeKey(key: string): string {
-  return key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+function normalizeKey(key: any): string {
+  return String(key ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '');
 }
 
-// Check if a header matches any candidate pattern
-function matchesPattern(key: string, patterns: string[]): boolean {
-  const norm = normalizeKey(key);
-  return patterns.some((p) => norm === p || norm.includes(p));
+// Expanded Amount Regex as requested:
+// /^(amount|amt|rupees|inr|price|cost|spend|paid|value|total|debit|credit|dr|cr|withdrawal|deposit|expense|income)/i
+const AMOUNT_ALIAS_REGEX =
+  /^(amount|amt|rupees|rs|inr|price|cost|spend|paid|value|total|debit|credit|dr|cr|withdrawal|deposit|expense|income)/i;
+
+const DEBIT_REGEX =
+  /^(debit|dr|withdrawal|withdrawals|expense|expenses|spent|paid|outflow|dr_amt|debitamt|debitamount|withdrawalamount)/i;
+
+const CREDIT_REGEX =
+  /^(credit|cr|deposit|deposits|income|incomes|received|inflow|cr_amt|creditamt|creditamount|depositamount)/i;
+
+const SUMMARY_LABEL_REGEX =
+  /^(total|grand\s*total|sub\s*total|subtotal|closing\s*balance|opening\s*balance|balance\s*c\/f|balance\s*b\/f|brought\s*forward|carried\s*forward|net\s*total)(?:\s*:)?$/i;
+
+// Identify the field type a cell header text might represent
+function identifyHeaderType(cellVal: any): string | null {
+  if (cellVal == null) return null;
+  const str = String(cellVal).trim();
+  if (!str) return null;
+  const norm = normalizeKey(str);
+  if (!norm) return null;
+
+  // Date
+  if (
+    /^(date|time|timestamp|datetime|txndate|transactiondate|bookingdate|valuedate|createdat)/i.test(norm) ||
+    norm.includes('date') ||
+    norm.includes('timestamp')
+  ) {
+    return 'date';
+  }
+
+  // Split Debit
+  if (DEBIT_REGEX.test(norm) || norm.includes('debit') || norm.includes('withdrawal')) {
+    return 'debit';
+  }
+
+  // Split Credit
+  if (CREDIT_REGEX.test(norm) || norm.includes('credit') || norm.includes('deposit')) {
+    return 'credit';
+  }
+
+  // Amount / General Amount
+  if (AMOUNT_ALIAS_REGEX.test(norm) || norm.includes('amount') || norm.includes('rupee')) {
+    return 'amount';
+  }
+
+  // Description / Title / Particulars / Narration
+  if (
+    /^(description|title|item|particulars|narration|desc|details|payee|merchant|party)/i.test(norm) ||
+    norm.includes('description') ||
+    norm.includes('particular') ||
+    norm.includes('narration')
+  ) {
+    return 'description';
+  }
+
+  // Category
+  if (/^(category|tag|tags|cat)/i.test(norm) || norm.includes('category')) {
+    return 'category';
+  }
+
+  // Payment Mode / Method
+  if (
+    /^(paymentmode|paymentmethod|paymenttype|paymode|payment|mode|channel)/i.test(norm) ||
+    norm.includes('paymentmode') ||
+    norm.includes('paymode')
+  ) {
+    return 'mode';
+  }
+
+  // Type (Cr/Dr or Income/Expense)
+  if (/^(txntype|transactiontype|type|crdr|drcr)/i.test(norm)) {
+    return 'type';
+  }
+
+  // Notes
+  if (/^(notes|memo|remarks|comment|comments)/i.test(norm) || norm.includes('remarks')) {
+    return 'notes';
+  }
+
+  return null;
+}
+
+// Convert 2D array or array of objects into uniform 2D array
+function normalizeToMatrix(input: any[]): any[][] {
+  if (!input || !input.length) return [];
+  if (Array.isArray(input[0])) {
+    return input as any[][];
+  }
+  // Array of objects
+  if (typeof input[0] === 'object' && input[0] !== null) {
+    const keys = Object.keys(input[0]);
+    const matrix: any[][] = [keys];
+    for (const item of input) {
+      matrix.push(keys.map((k) => item[k]));
+    }
+    return matrix;
+  }
+  return [];
 }
 
 // Robust date parser for strings, numbers (Excel serial), and Date objects
@@ -99,7 +197,12 @@ function parseDateValue(val: any): string {
 }
 
 // Clean and extract numeric amount
-function parseNumericAmount(val: any): { amount: number; isNegative: boolean } {
+// Strips spaces, currency signs (₹, $, Rs., etc.), and commas before converting to Number.
+function parseNumericAmount(val: any): { amount: number; isNegative: boolean; isCredit?: boolean; isDebit?: boolean } {
+  if (val == null || val === '') {
+    return { amount: 0, isNegative: false };
+  }
+
   if (typeof val === 'number') {
     return {
       amount: Math.abs(val),
@@ -107,18 +210,36 @@ function parseNumericAmount(val: any): { amount: number; isNegative: boolean } {
     };
   }
 
-  if (!val) return { amount: 0, isNegative: false };
+  let str = String(val).trim();
+  if (!str) return { amount: 0, isNegative: false };
 
-  const str = String(val).trim();
+  // Detect explicit CR / DR markers
+  const isCredit = /\b(cr|credit)\b/i.test(str);
+  const isDebit = /\b(dr|debit)\b/i.test(str);
+
   // Check negative formatted like -100 or (100) or 100-
-  const isNegative = str.startsWith('-') || str.endsWith('-') || (str.startsWith('(') && str.endsWith(')'));
-  // Remove currency signs (₹, $, €, £, Rs., etc.) and commas
-  const cleaned = str.replace(/[^0-9.-]+/g, '');
+  const isNegative =
+    str.startsWith('-') ||
+    str.endsWith('-') ||
+    (str.startsWith('(') && str.endsWith(')')) ||
+    isDebit;
+
+  // 1. Strip currency signs: ₹, $, €, £, Rs., Rs, INR, USD
+  let cleaned = str.replace(/(?:₹|\$|€|£|Rs\.?|INR|USD)/gi, '');
+
+  // 2. Strip whitespace, commas, quotes, parentheses
+  cleaned = cleaned.replace(/[\s,()"'`]/g, '');
+
+  // 3. Keep only numeric digits and decimal point
+  cleaned = cleaned.replace(/[^0-9.]/g, '');
+
   const parsed = parseFloat(cleaned);
 
   return {
     amount: isNaN(parsed) ? 0 : Math.abs(parsed),
     isNegative,
+    isCredit,
+    isDebit,
   };
 }
 
@@ -131,13 +252,15 @@ function normalizePaymentMode(val: any): PaymentMethod {
   if (/card|credit|debit|visa|master|amex|rupay/i.test(str)) return 'Card';
   if (/bank|net|neft|imps|rtgs|transfer|wire/i.test(str)) return 'Net Banking';
   if (/upi|gpay|google\s*pay|phonepe|paytm|bhim|qr/i.test(str)) return 'UPI';
-  
+
   return 'UPI';
 }
 
-// Process raw object rows (from either PapaParse or XLSX) into standardized Transactions
-export function processRawRows(rawRows: Record<string, any>[]): ImportResult {
-  if (!rawRows.length) {
+// Process raw rows (from either PapaParse or XLSX) into standardized Transactions
+export function processRawRows(rawInput: any[]): ImportResult {
+  const matrix = normalizeToMatrix(rawInput);
+
+  if (!matrix.length) {
     return {
       addedCount: 0,
       transactions: [],
@@ -154,78 +277,226 @@ export function processRawRows(rawRows: Record<string, any>[]): ImportResult {
     };
   }
 
-  // Find header keys using smart auto-detection
-  const firstRowKeys = Object.keys(rawRows[0] || {});
+  // 1. Smart Header Row Scan:
+  // Scan the first 10 rows. Find the row that contains at least 2 keywords matching our known field aliases.
+  let bestHeaderRowIndex = -1;
+  let maxMatchedCount = 0;
+  const scanLimit = Math.min(10, matrix.length);
 
-  const findKey = (patterns: string[]): string | undefined => {
-    return firstRowKeys.find((k) => matchesPattern(k, patterns));
-  };
+  for (let i = 0; i < scanLimit; i++) {
+    const row = matrix[i];
+    if (!row || !Array.isArray(row)) continue;
 
-  // Auto-detect column headers based on user specs:
-  // Amount: amount, rupees, price, cost, inr, amt, total
-  const amountKey = findKey(['amount', 'rupees', 'price', 'cost', 'inr', 'amt', 'total']);
-  const debitKey = findKey(['debit', 'dr', 'withdrawal', 'spent', 'expenseamount']);
-  const creditKey = findKey(['credit', 'cr', 'deposit', 'received', 'incomeamount']);
+    const matchedTypes = new Set<string>();
+    for (const cell of row) {
+      const type = identifyHeaderType(cell);
+      if (type) {
+        matchedTypes.add(type);
+      }
+    }
 
-  // Type: type, mode, cr/dr
-  const typeKey = findKey(['type', 'txntype', 'transactiontype', 'crdr', 'drcr']);
+    if (matchedTypes.size >= 2 && matchedTypes.size > maxMatchedCount) {
+      maxMatchedCount = matchedTypes.size;
+      bestHeaderRowIndex = i;
+    }
+  }
 
-  // Description / Title: description, title, name, item, note, particulars, details, narration
-  const descKey = findKey(['description', 'title', 'name', 'item', 'note', 'details', 'particulars', 'narration', 'desc']);
+  // Fallback: If no row had >= 2 keywords, use row 0
+  if (bestHeaderRowIndex === -1) {
+    bestHeaderRowIndex = 0;
+  }
 
-  // Category: category, tag, tags
-  const catKey = findKey(['category', 'tag', 'tags', 'cat']);
+  const headerRow = matrix[bestHeaderRowIndex] || [];
 
-  // Date: date, time, created_at, timestamp, txn date
-  const dateKey = findKey(['date', 'time', 'createdat', 'timestamp', 'datetime', 'txndate']);
+  // Map header row columns to known fields
+  let dateCol = -1;
+  let descCol = -1;
+  let catCol = -1;
+  let modeCol = -1;
+  let typeCol = -1;
+  let notesCol = -1;
+  let amountCol = -1;
+  let debitCol = -1;
+  let creditCol = -1;
 
-  // Payment Mode: payment mode, mode, payment, payment method
-  const modeKey = findKey(['paymentmode', 'paymentmethod', 'payment', 'paymode']) || (typeKey !== 'mode' ? findKey(['mode']) : undefined);
+  headerRow.forEach((cellVal: any, colIdx: number) => {
+    const norm = normalizeKey(cellVal);
+    if (!norm) return;
 
-  // Notes: notes, remarks, comment, memo
-  const notesKey = findKey(['notes', 'remarks', 'comment', 'memo']);
+    // Date
+    if (dateCol === -1 && (norm.includes('date') || norm.includes('timestamp') || norm.includes('time'))) {
+      dateCol = colIdx;
+      return;
+    }
+
+    // Debit / Expense / Withdrawal
+    if (debitCol === -1 && (DEBIT_REGEX.test(norm) || norm.includes('debit') || norm.includes('withdrawal'))) {
+      debitCol = colIdx;
+    }
+
+    // Credit / Income / Deposit
+    if (creditCol === -1 && (CREDIT_REGEX.test(norm) || norm.includes('credit') || norm.includes('deposit'))) {
+      creditCol = colIdx;
+    }
+
+    // Amount column (Amount / Rupees / Price / Cost / Spend / Paid / Total / Value / etc.)
+    if (
+      amountCol === -1 &&
+      (AMOUNT_ALIAS_REGEX.test(norm) || norm.includes('amount') || norm.includes('rupee')) &&
+      !DEBIT_REGEX.test(norm) &&
+      !CREDIT_REGEX.test(norm)
+    ) {
+      amountCol = colIdx;
+    }
+
+    // Description / Title / Particulars / Narration
+    if (
+      descCol === -1 &&
+      (norm.includes('desc') ||
+        norm.includes('particular') ||
+        norm.includes('narration') ||
+        norm.includes('title') ||
+        norm.includes('item') ||
+        norm.includes('payee') ||
+        norm.includes('merchant') ||
+        norm.includes('party'))
+    ) {
+      descCol = colIdx;
+      return;
+    }
+
+    // Category
+    if (catCol === -1 && (norm.includes('category') || norm.includes('tag') || norm.includes('cat'))) {
+      catCol = colIdx;
+      return;
+    }
+
+    // Payment Mode
+    if (
+      modeCol === -1 &&
+      (norm.includes('paymode') || norm.includes('paymentmode') || norm.includes('payment') || norm === 'mode')
+    ) {
+      modeCol = colIdx;
+      return;
+    }
+
+    // Type (Cr/Dr or Income/Expense)
+    if (typeCol === -1 && (norm.includes('type') || norm === 'crdr' || norm === 'drcr')) {
+      typeCol = colIdx;
+      return;
+    }
+
+    // Notes
+    if (notesCol === -1 && (norm.includes('note') || norm.includes('remark') || norm.includes('comment') || norm.includes('memo'))) {
+      notesCol = colIdx;
+      return;
+    }
+  });
+
+  // Dual Debit/Credit Support:
+  // If separate Debit and Credit columns exist
+  const hasSplitDebitCredit = debitCol !== -1 && creditCol !== -1;
+
+  // If no general amount column found, but single debit or credit column exists, use it
+  if (!hasSplitDebitCredit && amountCol === -1) {
+    if (debitCol !== -1) {
+      amountCol = debitCol;
+    } else if (creditCol !== -1) {
+      amountCol = creditCol;
+    } else {
+      // Look for any column matching AMOUNT_ALIAS_REGEX
+      headerRow.forEach((cellVal: any, colIdx: number) => {
+        if (amountCol === -1 && AMOUNT_ALIAS_REGEX.test(normalizeKey(cellVal))) {
+          amountCol = colIdx;
+        }
+      });
+    }
+  }
+
+  const errors: string[] = [];
+
+  // Check if Amount column could be identified
+  if (!hasSplitDebitCredit && amountCol === -1) {
+    return {
+      addedCount: 0,
+      transactions: [],
+      errors: ['Could not find Amount column in the uploaded spreadsheet.'],
+      summary: {
+        totalCount: 0,
+        totalIncome: 0,
+        totalExpense: 0,
+        incomeCount: 0,
+        expenseCount: 0,
+        dateRange: null,
+        categories: [],
+      },
+    };
+  }
 
   const parsedTransactions: Transaction[] = [];
-  const errors: string[] = [];
   const categorySet = new Set<string>();
 
-  rawRows.forEach((row, index) => {
-    const rowNum = index + 2; // Account for header row in spreadsheets
+  // Process subsequent rows as transaction records
+  const dataRows = matrix.slice(bestHeaderRowIndex + 1);
+
+  dataRows.forEach((row) => {
+    // Skip completely empty rows
+    if (!row || !Array.isArray(row) || row.every((c: any) => c == null || String(c).trim() === '')) {
+      return;
+    }
+
+    // Skip summary rows (e.g. where Description or any cell is 'Total', 'Grand Total', etc.)
+    const rawDesc = descCol !== -1 ? String(row[descCol] ?? '').trim() : '';
+    if (SUMMARY_LABEL_REGEX.test(rawDesc)) {
+      return; // Skip summary row
+    }
+    const isSummaryRow = row.some((cell: any) => SUMMARY_LABEL_REGEX.test(String(cell ?? '').trim()));
+    if (isSummaryRow) {
+      return; // Skip summary row
+    }
 
     // 1. Amount & Type calculation
     let amount = 0;
-    let isNegative = false;
     let detectedType: TransactionType = 'expense';
 
-    // Case A: Separate Credit and Debit columns (Bank statement format)
-    if (creditKey && debitKey) {
-      const cr = parseNumericAmount(row[creditKey]);
-      const dr = parseNumericAmount(row[debitKey]);
+    if (hasSplitDebitCredit) {
+      // Split Debit/Credit columns: read whichever column has a non-zero value
+      const drParsed = parseNumericAmount(row[debitCol]);
+      const crParsed = parseNumericAmount(row[creditCol]);
 
-      if (cr.amount > 0) {
-        amount = cr.amount;
-        detectedType = 'income';
-      } else if (dr.amount > 0) {
-        amount = dr.amount;
+      if (drParsed.amount > 0 && crParsed.amount > 0) {
+        if (crParsed.amount > drParsed.amount) {
+          amount = crParsed.amount;
+          detectedType = 'income';
+        } else {
+          amount = drParsed.amount;
+          detectedType = 'expense';
+        }
+      } else if (drParsed.amount > 0) {
+        // Debit / Expense / Withdrawal -> amount = positive value, type = 'expense'
+        amount = drParsed.amount;
         detectedType = 'expense';
+      } else if (crParsed.amount > 0) {
+        // Credit / Income / Deposit -> amount = positive value, type = 'income'
+        amount = crParsed.amount;
+        detectedType = 'income';
       } else {
-        errors.push(`Row ${rowNum}: Both Credit and Debit are zero or invalid. Skipped.`);
+        // Both are 0 or empty -> skip
         return;
       }
-    } else if (amountKey) {
-      // Case B: Unified Amount column
-      const amtParsed = parseNumericAmount(row[amountKey]);
+    } else {
+      // Unified Amount column
+      const amtParsed = parseNumericAmount(row[amountCol]);
       amount = amtParsed.amount;
-      isNegative = amtParsed.isNegative;
+      const isNegative = amtParsed.isNegative;
 
       if (amount <= 0) {
-        errors.push(`Row ${rowNum}: Amount is 0 or invalid. Skipped.`);
         return;
       }
 
       // Check Type column
-      if (typeKey && row[typeKey]) {
-        const typeStr = String(row[typeKey]).trim().toLowerCase();
+      if (typeCol !== -1 && row[typeCol] != null) {
+        const typeStr = String(row[typeCol]).trim().toLowerCase();
         if (/inc|credit|^cr$|deposit|salary|refund|received|\+/i.test(typeStr)) {
           detectedType = 'income';
         } else if (/exp|debit|^dr$|withdrawal|spent|paid|-/i.test(typeStr)) {
@@ -233,34 +504,39 @@ export function processRawRows(rawRows: Record<string, any>[]): ImportResult {
         } else {
           detectedType = isNegative ? 'expense' : 'expense';
         }
+      } else if (amtParsed.isCredit) {
+        detectedType = 'income';
+      } else if (amtParsed.isDebit) {
+        detectedType = 'expense';
       } else {
-        // Fallback: If amount was explicitly negative (e.g. -500), it's an expense.
-        detectedType = isNegative ? 'expense' : 'expense';
+        // Check column header name itself
+        const headerNorm = normalizeKey(headerRow[amountCol]);
+        if (/^(credit|cr|deposit|deposits|income|incomes|received|inflow)/i.test(headerNorm)) {
+          detectedType = 'income';
+        } else {
+          detectedType = 'expense';
+        }
       }
-    } else {
-      errors.push(`Row ${rowNum}: Could not find Amount column.`);
-      return;
     }
 
     // 2. Description / Title
-    const rawDesc = descKey ? String(row[descKey] || '').trim() : '';
     const description = rawDesc || 'Imported Transaction';
 
     // 3. Category (Fallback: 'Other / Misc')
-    const rawCat = catKey ? String(row[catKey] || '').trim() : '';
+    const rawCat = catCol !== -1 ? String(row[catCol] ?? '').trim() : '';
     const category = rawCat || 'Other / Misc';
     categorySet.add(category);
 
     // 4. Date / Timestamp
-    const rawDate = dateKey ? row[dateKey] : undefined;
+    const rawDate = dateCol !== -1 ? row[dateCol] : undefined;
     const timestamp = parseDateValue(rawDate);
 
-    // 5. Payment Mode (Fallback: 'UPI' or 'Cash')
-    const rawMode = modeKey ? row[modeKey] : undefined;
+    // 5. Payment Mode (Fallback: 'UPI')
+    const rawMode = modeCol !== -1 ? row[modeCol] : undefined;
     const payment_method = normalizePaymentMode(rawMode);
 
     // 6. Notes
-    const notes = notesKey ? String(row[notesKey] || '').trim() : '';
+    const notes = notesCol !== -1 ? String(row[notesCol] ?? '').trim() : '';
 
     parsedTransactions.push({
       id: `tx-import-${Date.now()}-${generateUUID().slice(0, 8)}`,
@@ -298,6 +574,10 @@ export function processRawRows(rawRows: Record<string, any>[]): ImportResult {
     if (!minDate || txDate < minDate) minDate = txDate;
     if (!maxDate || txDate > maxDate) maxDate = txDate;
   });
+
+  if (parsedTransactions.length === 0 && errors.length === 0) {
+    errors.push('No valid transaction records found in uploaded file.');
+  }
 
   return {
     addedCount: parsedTransactions.length,
@@ -346,10 +626,9 @@ export async function parseTransactionFile(file: File): Promise<ImportResult> {
 
   if (isCsv) {
     return new Promise((resolve, reject) => {
-      Papa.parse<Record<string, any>>(file, {
-        header: true,
+      Papa.parse<any[]>(file, {
+        header: false,
         skipEmptyLines: 'greedy',
-        dynamicTyping: true,
         complete: (results) => {
           try {
             if (results.errors && results.errors.length > 0) {
@@ -398,9 +677,12 @@ export async function parseTransactionFile(file: File): Promise<ImportResult> {
         }
 
         const worksheet = workbook.Sheets[firstSheetName];
-        const rawJson: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+          header: 1,
+          defval: '',
+        });
 
-        resolve(processRawRows(rawJson));
+        resolve(processRawRows(rawRows));
       } catch (err: any) {
         reject(err);
       }
