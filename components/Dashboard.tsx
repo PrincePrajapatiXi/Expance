@@ -40,9 +40,11 @@ export default function Dashboard() {
     addNewTransaction,
     editExistingTransaction,
     removeTransaction,
+    refetch,
   } = useTransactions();
 
-  // Auto-switch date filter to "All Time" when imported transactions contain dates outside current month
+  // Auto-switch date filter to "All Time" when imported transactions contain dates outside current month.
+  // Also re-fetches data immediately when the import event fires or when the user navigates back to this page.
   React.useEffect(() => {
     const handleTxUpdate = (event: any) => {
       const detail = event?.detail;
@@ -66,6 +68,9 @@ export default function Dashboard() {
         setSelectedMonth('');
         setFilters((prev) => ({ ...prev, dateRange: 'all', selectedMonth: '' }));
       }
+
+      // Re-fetch so Dashboard always shows latest data after import
+      refetch();
     };
 
     const handleResetDateFilter = () => {
@@ -73,14 +78,23 @@ export default function Dashboard() {
       setFilters((prev) => ({ ...prev, dateRange: 'all', selectedMonth: '' }));
     };
 
+    // Re-fetch when user switches back to this tab/page after importing on profile page
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refetch();
+      }
+    };
+
     window.addEventListener('expance:transactions_updated', handleTxUpdate);
     window.addEventListener('expance:reset_date_filter', handleResetDateFilter);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       window.removeEventListener('expance:transactions_updated', handleTxUpdate);
       window.removeEventListener('expance:reset_date_filter', handleResetDateFilter);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, []);
+  }, [refetch]);
 
   // Filter Transactions based on UI controls & Selected Month
   const filteredTransactions = transactions.filter((tx) => {

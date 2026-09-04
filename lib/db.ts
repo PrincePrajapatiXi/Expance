@@ -243,9 +243,20 @@ export async function fetchTransactions(): Promise<Transaction[]> {
             syncLocalTransactionsToSupabase(authUser.id);
           }
 
-          // Cache in local storage for instant offline access
-          saveLocalTransactions(remoteNormalized);
-          return remoteNormalized;
+          // Only overwrite localStorage if remote has at least as many rows as local.
+          // This prevents a race condition where a just-imported local cache gets
+          // wiped by a stale Supabase response that hasn't received the new rows yet.
+          if (remoteNormalized.length >= local.length) {
+            saveLocalTransactions(remoteNormalized);
+            return remoteNormalized;
+          }
+
+          // Remote has fewer rows than local — merge to avoid losing just-imported data
+          const remoteIdSet = new Set(remoteNormalized.map((r) => r.id));
+          const onlyLocal = local.filter((l) => !remoteIdSet.has(l.id));
+          const merged = [...remoteNormalized, ...onlyLocal];
+          saveLocalTransactions(merged);
+          return merged;
         }
 
         if (error) {
@@ -365,7 +376,9 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
     const userId = user.id;
     const nowIso = new Date().toISOString();
 
-    // Attach user_id: user.id to EVERY single transaction item and format fields
+    // Build rows using ONLY the columns the Supabase schema accepts
+    // (same columns as addTransaction: user_id, type, category, description, payment_mode, amount, notes, timestamp)
+    // Do NOT send id/title/date/created_at — Supabase generates id and created_at server-side
     const rowsToInsert = importedList.map((t) => {
       const norm = normalizeTransaction({
         ...t,
@@ -375,63 +388,28 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
       const dateVal = norm.timestamp || nowIso;
 
       return {
-        id: generateUUID(),
         user_id: userId,
-        title: descVal,
-        description: descVal,
-        amount: Number(norm.amount) || 0,
         type: norm.type === 'income' ? 'income' : 'expense',
         category: norm.category || 'Other / Misc',
+        description: descVal,
         payment_mode: norm.payment_method || norm.payment_mode || 'UPI',
+        amount: Number(norm.amount) || 0,
         notes: norm.notes || '',
-        date: dateVal,
         timestamp: dateVal,
-        created_at: nowIso,
       };
     });
 
-    // Insert in batches of 100 via supabase.from('transactions').insert(batch)
+    // Insert in batches of 100
     const BATCH_SIZE = 100;
     const insertedRecords: any[] = [];
 
     for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
       const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
 
-      // Attempt insert with full schema fields
-      let { data, error } = await supabase
+      const { data, error } = await supabase
         .from('transactions')
         .insert(batch)
         .select();
-
-      // If schema doesn't have 'title' or 'date', retry with standard schema (description, timestamp)
-      if (
-        error &&
-        (error.message.includes('title') ||
-          error.message.includes('date') ||
-          error.code === 'PGRST204')
-      ) {
-        console.warn('[Supabase Bulk Insert] Retrying batch with standard schema fields...');
-        const standardBatch = batch.map((r) => ({
-          id: r.id,
-          user_id: r.user_id,
-          type: r.type,
-          category: r.category,
-          description: r.description,
-          payment_mode: r.payment_mode,
-          notes: r.notes,
-          amount: r.amount,
-          timestamp: r.timestamp,
-          created_at: r.created_at,
-        }));
-
-        const retryRes = await supabase
-          .from('transactions')
-          .insert(standardBatch)
-          .select();
-
-        data = retryRes.data;
-        error = retryRes.error;
-      }
 
       if (error) {
         console.error(`[Supabase Bulk Insert Error] Batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error.message, error);
@@ -445,12 +423,23 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
       }
     }
 
-    // Merge successfully inserted remote records into local cache
+    // Use server-returned rows (with real IDs) for localStorage cache
     const currentLocal = getLocalTransactions();
-    const normalizedRemote = (insertedRecords.length > 0 ? insertedRecords : rowsToInsert).map(normalizeTransaction);
-    const remoteIds = new Set(normalizedRemote.map((r) => r.id));
-    const filteredLocal = currentLocal.filter((l) => !remoteIds.has(l.id));
-    finalSaved = [...normalizedRemote, ...filteredLocal];
+    const normalizedRemote = insertedRecords.map(normalizeTransaction);
+
+    if (normalizedRemote.length > 0) {
+      // Merge: new remote rows first, then any existing local rows not already in remote
+      const remoteIds = new Set(normalizedRemote.map((r) => r.id));
+      const filteredLocal = currentLocal.filter((l) => !remoteIds.has(l.id));
+      finalSaved = [...normalizedRemote, ...filteredLocal];
+    } else {
+      // insert returned no data — fall back to local with generated IDs
+      console.warn('[Supabase Bulk Insert] Insert succeeded but returned no rows, using local fallback');
+      const normalizedFallback = importedList.map((t) =>
+        normalizeTransaction({ ...t, id: generateUUID(), user_id: userId })
+      );
+      finalSaved = [...normalizedFallback, ...currentLocal];
+    }
     saveLocalTransactions(finalSaved);
   } else {
     // --- Guest Mode / Unauthenticated ---
