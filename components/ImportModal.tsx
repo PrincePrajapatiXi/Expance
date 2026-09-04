@@ -294,17 +294,17 @@ export default function ImportModal({
                 </div>
               </div>
 
-              {/* Sample Data Table Preview */}
+              {/* Extracted Transactions List Preview */}
               <div>
                 <div className="flex items-center justify-between mb-1.5 px-0.5">
                   <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                    Preview Sample (First {Math.min(5, result.transactions.length)} of {result.transactions.length})
+                    Extracted Transactions ({result.transactions.length} items)
                   </span>
-                  <span className="text-[10px] text-slate-400">Auto-detected columns</span>
+                  <span className="text-[10px] text-slate-400">Scroll to review all rows</span>
                 </div>
-                <div className="max-h-48 overflow-y-auto rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 divide-y divide-slate-100 dark:divide-slate-800">
-                  {result.transactions.slice(0, 5).map((tx, idx) => (
-                    <div key={idx} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
+                <div className="max-h-60 overflow-y-auto rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900/60 divide-y divide-slate-100 dark:divide-slate-800 shadow-inner">
+                  {result.transactions.map((tx, idx) => (
+                    <div key={tx.id || idx} className="p-2.5 flex items-center justify-between text-xs hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
                       <div className="min-w-0 flex-1 pr-2">
                         <div className="flex items-center gap-2">
                           <span
@@ -316,7 +316,7 @@ export default function ImportModal({
                           >
                             {tx.type}
                           </span>
-                          <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[150px]">
+                          <span className="font-bold text-slate-800 dark:text-slate-200 truncate max-w-[200px]">
                             {tx.description}
                           </span>
                         </div>

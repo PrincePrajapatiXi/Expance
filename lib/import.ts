@@ -56,7 +56,110 @@ const CREDIT_REGEX =
   /^(credit|cr|deposit|deposits|income|incomes|received|inflow|cr_amt|creditamt|creditamount|depositamount)/i;
 
 const SUMMARY_LABEL_REGEX =
-  /^(total|grand\s*total|sub\s*total|subtotal|closing\s*balance|opening\s*balance|balance\s*c\/f|balance\s*b\/f|brought\s*forward|carried\s*forward|net\s*total)(?:\s*:)?$/i;
+  /(^|\b)(grand\s*total|net\s*balance|sub\s*total|subtotal|ending\s*balance|closing\s*balance|opening\s*balance|total\s*(expenses?|amount|income|spend|paid|payout)?|balance\s*c\/f|balance\s*b\/f|brought\s*forward|carried\s*forward)($|\b|:)/i;
+
+// Strictly identify summary/footer rows to ignore:
+// Matches rows where description or cell text contains 'Total', 'Grand Total', 'Net Balance', 'Subtotal', or 'Ending Balance'.
+export function isSummaryRow(desc: string, rowValues: any[]): boolean {
+  const descClean = String(desc || '').trim().toLowerCase();
+
+  const summaryKeywords = [
+    'grand total',
+    'net balance',
+    'ending balance',
+    'subtotal',
+    'sub total',
+    'closing balance',
+    'opening balance',
+    'balance c/f',
+    'balance b/f',
+    'brought forward',
+    'carried forward',
+    'total expenses',
+    'total expense',
+    'total amount',
+    'total income',
+    'total paid',
+    'total spend',
+    'net total',
+  ];
+
+  for (const kw of summaryKeywords) {
+    if (descClean.includes(kw)) {
+      return true;
+    }
+  }
+
+  // Exact or prefixed Total (e.g. 'Total', 'Total:', 'Total -')
+  if (/^total(?:\s*[:=-].*)?$/i.test(descClean)) {
+    return true;
+  }
+
+  // Also check if any cell in the row explicitly contains summary markers
+  for (const cell of rowValues) {
+    const s = String(cell ?? '').trim().toLowerCase();
+    if (!s) continue;
+    if (
+      s === 'total' ||
+      s.startsWith('total:') ||
+      s.startsWith('total -') ||
+      s.includes('grand total') ||
+      s.includes('net balance') ||
+      s.includes('ending balance') ||
+      s.includes('subtotal') ||
+      s.includes('closing balance')
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Extract Description column dynamically:
+// Prioritizes: Description, Particulars, Item, Name, Expense Details, Remarks
+export function findDescriptionCol(headerRow: any[]): number {
+  let primaryCol = -1;
+  let secondaryCol = -1;
+  let fallbackCol = -1;
+
+  headerRow.forEach((cell, idx) => {
+    const norm = normalizeKey(cell);
+    if (!norm) return;
+
+    // 1. High priority: Particulars, Description, Item, Expense Details, Details, Narration
+    if (
+      norm.includes('particular') ||
+      norm.includes('description') ||
+      norm.includes('item') ||
+      norm.includes('expensedetail') ||
+      norm === 'details' ||
+      norm === 'detail' ||
+      norm.includes('narration')
+    ) {
+      if (primaryCol === -1) primaryCol = idx;
+    }
+    // 2. Secondary priority: Name, Payee, Merchant, Party, Title
+    else if (
+      norm === 'name' ||
+      norm.includes('itemname') ||
+      norm.includes('payee') ||
+      norm.includes('merchant') ||
+      norm.includes('party') ||
+      norm.includes('title')
+    ) {
+      if (secondaryCol === -1) secondaryCol = idx;
+    }
+    // 3. Fallback: Remarks, Memo, Comment
+    else if (norm.includes('remark') || norm.includes('memo') || norm.includes('comment')) {
+      if (fallbackCol === -1) fallbackCol = idx;
+    }
+  });
+
+  if (primaryCol !== -1) return primaryCol;
+  if (secondaryCol !== -1) return secondaryCol;
+  return fallbackCol;
+}
 
 // Identify the field type a cell header text might represent
 function identifyHeaderType(cellVal: any): string | null {
@@ -90,12 +193,16 @@ function identifyHeaderType(cellVal: any): string | null {
     return 'amount';
   }
 
-  // Description / Title / Particulars / Narration
+  // Description / Title / Particulars / Narration / Item / Name / Expense Details
   if (
-    /^(description|title|item|particulars|narration|desc|details|payee|merchant|party)/i.test(norm) ||
+    /^(description|title|item|particulars|narration|desc|details|payee|merchant|party|name|expensedetail|expensedetails)/i.test(norm) ||
     norm.includes('description') ||
     norm.includes('particular') ||
-    norm.includes('narration')
+    norm.includes('narration') ||
+    norm.includes('item') ||
+    norm.includes('expensedetail') ||
+    norm === 'details' ||
+    norm === 'name'
   ) {
     return 'description';
   }
@@ -120,7 +227,7 @@ function identifyHeaderType(cellVal: any): string | null {
   }
 
   // Notes
-  if (/^(notes|memo|remarks|comment|comments)/i.test(norm) || norm.includes('remarks')) {
+  if (/^(notes|memo|remarks|comment|comments)/i.test(norm) || norm.includes('remarks') || norm.includes('memo')) {
     return 'notes';
   }
 
@@ -151,26 +258,40 @@ function parseDateValue(val: any): string {
   if (!val) return new Date().toISOString();
 
   try {
-    // If already a Date object
+    // 1. If already a Date object
     if (val instanceof Date) {
       return isNaN(val.getTime()) ? new Date().toISOString() : val.toISOString();
     }
 
-    // If Excel numerical serial date (e.g. 45200 ~ 2023)
+    // 2. If Excel numerical serial date (e.g. 45200 ~ 2023, or float like 45200.5)
+    let numVal: number | null = null;
     if (typeof val === 'number') {
-      if (val > 20000 && val < 70000) {
-        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-        const parsed = new Date(excelEpoch.getTime() + val * 86400000);
-        if (!isNaN(parsed.getTime())) return parsed.toISOString();
+      numVal = val;
+    } else if (typeof val === 'string' && /^\d{5}(?:\.\d+)?$/.test(val.trim())) {
+      numVal = parseFloat(val.trim());
+    }
+
+    if (numVal !== null && numVal > 10000 && numVal < 90000) {
+      try {
+        if (XLSX.SSF && typeof XLSX.SSF.parse_date_code === 'function') {
+          const code = XLSX.SSF.parse_date_code(numVal);
+          if (code && code.y && code.m && code.d) {
+            const dt = new Date(Date.UTC(code.y, code.m - 1, code.d, code.H || 0, code.M || 0, Math.floor(code.S || 0)));
+            if (!isNaN(dt.getTime())) return dt.toISOString();
+          }
+        }
+      } catch {
+        // Fallback below
       }
-      const parsed = new Date(val);
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const parsed = new Date(excelEpoch.getTime() + numVal * 86400000);
       if (!isNaN(parsed.getTime())) return parsed.toISOString();
     }
 
     const str = String(val).trim();
     if (!str) return new Date().toISOString();
 
-    // Match DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+    // 3. Match DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
     const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
     if (dmyMatch) {
       const [, d, m, y, h = '0', min = '0', s = '0'] = dmyMatch;
@@ -180,24 +301,24 @@ function parseDateValue(val: any): string {
 
       if (day <= 12 && month > 12) {
         // MM/DD/YYYY
-        const parsed = new Date(year, day - 1, month, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
+        const parsed = new Date(Date.UTC(year, day - 1, month, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10)));
         if (!isNaN(parsed.getTime())) return parsed.toISOString();
       } else {
         // DD/MM/YYYY
-        const parsed = new Date(year, month - 1, day, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
+        const parsed = new Date(Date.UTC(year, month - 1, day, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10)));
         if (!isNaN(parsed.getTime())) return parsed.toISOString();
       }
     }
 
-    // Match YYYY-MM-DD or YYYY/MM/DD
+    // 4. Match YYYY-MM-DD or YYYY/MM/DD
     const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
     if (ymdMatch) {
       const [, y, m, d, h = '0', min = '0', s = '0'] = ymdMatch;
-      const parsed = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
+      const parsed = new Date(Date.UTC(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), parseInt(h, 10), parseInt(min, 10), parseInt(s, 10)));
       if (!isNaN(parsed.getTime())) return parsed.toISOString();
     }
 
-    // Standard Date parse fallback (handles ISO, '04 Sep 2026', 'September 4, 2026', etc.)
+    // 5. Standard Date parse fallback (handles ISO, '04 Sep 2026', 'September 4, 2026', etc.)
     const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) {
       return parsed.toISOString();
@@ -321,16 +442,16 @@ export function processRawRows(rawInput: any[]): ImportResult {
 
   const headerRow = matrix[bestHeaderRowIndex] || [];
 
-  // Map header row columns to known fields
+  // Prioritize Description column detection across Particulars, Item, Description, Name, Expense Details, Remarks
+  let descCol = findDescriptionCol(headerRow);
   let dateCol = -1;
-  let descCol = -1;
+  let amountCol = -1;
+  let debitCol = -1;
+  let creditCol = -1;
   let catCol = -1;
   let modeCol = -1;
   let typeCol = -1;
   let notesCol = -1;
-  let amountCol = -1;
-  let debitCol = -1;
-  let creditCol = -1;
 
   headerRow.forEach((cellVal: any, colIdx: number) => {
     const norm = normalizeKey(cellVal);
@@ -362,22 +483,6 @@ export function processRawRows(rawInput: any[]): ImportResult {
       amountCol = colIdx;
     }
 
-    // Description / Title / Particulars / Narration
-    if (
-      descCol === -1 &&
-      (norm.includes('desc') ||
-        norm.includes('particular') ||
-        norm.includes('narration') ||
-        norm.includes('title') ||
-        norm.includes('item') ||
-        norm.includes('payee') ||
-        norm.includes('merchant') ||
-        norm.includes('party'))
-    ) {
-      descCol = colIdx;
-      return;
-    }
-
     // Category
     if (catCol === -1 && (norm.includes('category') || norm.includes('tag') || norm.includes('cat'))) {
       catCol = colIdx;
@@ -399,8 +504,8 @@ export function processRawRows(rawInput: any[]): ImportResult {
       return;
     }
 
-    // Notes
-    if (notesCol === -1 && (norm.includes('note') || norm.includes('remark') || norm.includes('comment') || norm.includes('memo'))) {
+    // Notes / Remarks
+    if (colIdx !== descCol && notesCol === -1 && (norm.includes('note') || norm.includes('remark') || norm.includes('comment') || norm.includes('memo'))) {
       notesCol = colIdx;
       return;
     }
@@ -458,13 +563,28 @@ export function processRawRows(rawInput: any[]): ImportResult {
       return;
     }
 
-    // Skip summary footer rows (e.g. where Description is explicitly 'Total', 'Grand Total', etc.)
-    const rawDesc = descCol !== -1 ? String(row[descCol] ?? '').trim() : '';
-    if (SUMMARY_LABEL_REGEX.test(rawDesc)) {
+    // 1. Description / Title extraction
+    let rawDesc = descCol !== -1 && row[descCol] != null ? String(row[descCol]).trim() : '';
+    if (!rawDesc) {
+      // Check other text cells that are not amount, date, or category
+      for (let c = 0; c < row.length; c++) {
+        if (c !== amountCol && c !== debitCol && c !== creditCol && c !== dateCol && c !== catCol) {
+          const val = String(row[c] ?? '').trim();
+          if (val && isNaN(Number(val)) && !val.match(/^\d{1,4}[-/.]/)) {
+            rawDesc = val;
+            break;
+          }
+        }
+      }
+    }
+
+    // Strictly ignore summary/footer rows:
+    // If the description/item text contains 'Total', 'Grand Total', 'Net Balance', 'Subtotal', or 'Ending Balance', SKIP that row entirely.
+    if (isSummaryRow(rawDesc, row)) {
       return; // Skip summary footer row
     }
 
-    // 1. Amount & Type calculation
+    // 2. Amount & Type calculation
     let amount = 0;
     let detectedType: TransactionType = 'expense';
 
@@ -604,6 +724,82 @@ export function processRawRows(rawInput: any[]): ImportResult {
   };
 }
 
+// Check all sheets in workbook.SheetNames:
+// Picks the sheet that has the most non-empty rows or contains transaction keywords ('Date', 'Description', 'Particulars', 'Amount', 'Expense').
+// Avoids selecting 1-row summary charts or overview sheets.
+export function findBestSheet(workbook: XLSX.WorkBook): { sheetName: string; rows: any[][] } {
+  if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+    return { sheetName: '', rows: [] };
+  }
+
+  const summarySheetRegex = /^(summary|dashboard|overview|charts?|cover|kpi|reports?|pivot)/i;
+  const headerKeywordsRegex = /(date|particulars?|description|item|details?|name|amount|expense|debit|credit|cost|spend|paid|price)/i;
+
+  let bestSheetName = workbook.SheetNames[0];
+  let bestRows: any[][] = [];
+  let highestScore = -Infinity;
+
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) continue;
+
+    const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
+      header: 1,
+      defval: '',
+      blankrows: false,
+    });
+
+    const nonEmptyRows = rawRows.filter(
+      (row) => Array.isArray(row) && row.some((cell) => cell != null && String(cell).trim() !== '')
+    );
+
+    if (nonEmptyRows.length === 0) continue;
+
+    // Count keyword matches in the first 15 rows
+    let keywordMatches = 0;
+    const scanLimit = Math.min(15, nonEmptyRows.length);
+    for (let r = 0; r < scanLimit; r++) {
+      for (const cell of nonEmptyRows[r]) {
+        const str = String(cell ?? '').trim();
+        if (headerKeywordsRegex.test(str)) {
+          keywordMatches++;
+        }
+      }
+    }
+
+    // Dry run parsing to see how many transactions this sheet produces
+    let parsedCount = 0;
+    try {
+      const outcome = processRawRows(nonEmptyRows);
+      parsedCount = outcome.transactions.length;
+    } catch {
+      parsedCount = 0;
+    }
+
+    const isSummaryName = summarySheetRegex.test(sheetName.trim());
+    let score = parsedCount * 1000 + keywordMatches * 20 + nonEmptyRows.length;
+    if (isSummaryName && parsedCount <= 2) {
+      score -= 5000;
+    }
+
+    if (score > highestScore) {
+      highestScore = score;
+      bestSheetName = sheetName;
+      bestRows = nonEmptyRows;
+    }
+  }
+
+  if (bestRows.length > 0) {
+    return { sheetName: bestSheetName, rows: bestRows };
+  }
+
+  // Fallback to first sheet
+  const first = workbook.SheetNames[0];
+  const ws = workbook.Sheets[first];
+  const rows: any[][] = ws ? XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) : [];
+  return { sheetName: first, rows };
+}
+
 // Client-side parser supporting CSV (PapaParse) & XLSX/XLS/XLSM (SheetJS)
 export async function parseTransactionFile(file: File): Promise<ImportResult> {
   const fileName = file.name.toLowerCase();
@@ -664,14 +860,19 @@ export async function parseTransactionFile(file: File): Promise<ImportResult> {
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+        const workbook = XLSX.read(data, {
+          type: 'array',
+          cellDates: true,
+          cellText: false,
+          cellNF: false,
+        });
 
-        const firstSheetName = workbook.SheetNames[0];
-        if (!firstSheetName) {
+        const bestSheet = findBestSheet(workbook);
+        if (!bestSheet.rows || bestSheet.rows.length === 0) {
           resolve({
             addedCount: 0,
             transactions: [],
-            errors: ['No sheet found in uploaded spreadsheet.'],
+            errors: ['No sheet with valid transaction data found in uploaded spreadsheet.'],
             summary: {
               totalCount: 0,
               totalIncome: 0,
@@ -685,13 +886,7 @@ export async function parseTransactionFile(file: File): Promise<ImportResult> {
           return;
         }
 
-        const worksheet = workbook.Sheets[firstSheetName];
-        const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
-          header: 1,
-          defval: '',
-        });
-
-        resolve(processRawRows(rawRows));
+        resolve(processRawRows(bestSheet.rows));
       } catch (err: any) {
         reject(err);
       }
