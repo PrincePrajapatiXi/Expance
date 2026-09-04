@@ -42,6 +42,46 @@ export default function Dashboard() {
     removeTransaction,
   } = useTransactions();
 
+  // Auto-switch date filter to "All Time" when imported transactions contain dates outside current month
+  React.useEffect(() => {
+    const handleTxUpdate = (event: any) => {
+      const detail = event?.detail;
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const listToCheck = Array.isArray(detail?.transactions)
+        ? detail.transactions
+        : Array.isArray(detail)
+        ? detail
+        : [];
+
+      const hasOutOfMonth =
+        detail?.resetToAllTime ||
+        detail?.hasOutOfMonthDates ||
+        listToCheck.some((tx: any) => {
+          const m = (tx.timestamp || '').substring(0, 7);
+          return m && m !== currentMonth;
+        });
+
+      if (hasOutOfMonth) {
+        setSelectedMonth('');
+        setFilters((prev) => ({ ...prev, dateRange: 'all', selectedMonth: '' }));
+      }
+    };
+
+    const handleResetDateFilter = () => {
+      setSelectedMonth('');
+      setFilters((prev) => ({ ...prev, dateRange: 'all', selectedMonth: '' }));
+    };
+
+    window.addEventListener('expance:transactions_updated', handleTxUpdate);
+    window.addEventListener('expance:reset_date_filter', handleResetDateFilter);
+
+    return () => {
+      window.removeEventListener('expance:transactions_updated', handleTxUpdate);
+      window.removeEventListener('expance:reset_date_filter', handleResetDateFilter);
+    };
+  }, []);
+
   // Filter Transactions based on UI controls & Selected Month
   const filteredTransactions = transactions.filter((tx) => {
     // Month filter

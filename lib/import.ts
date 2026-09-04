@@ -145,52 +145,65 @@ function normalizeToMatrix(input: any[]): any[][] {
   return [];
 }
 
-// Robust date parser for strings, numbers (Excel serial), and Date objects
+// Robust date parser for strings, numbers (Excel serial), and Date objects.
+// Guaranteed to return an ISO string, defaulting to new Date().toISOString() if invalid or missing.
 function parseDateValue(val: any): string {
   if (!val) return new Date().toISOString();
 
-  // If already a Date object
-  if (val instanceof Date) {
-    return isNaN(val.getTime()) ? new Date().toISOString() : val.toISOString();
-  }
+  try {
+    // If already a Date object
+    if (val instanceof Date) {
+      return isNaN(val.getTime()) ? new Date().toISOString() : val.toISOString();
+    }
 
-  // If Excel numerical serial date (e.g. 45200 ~ 2023)
-  if (typeof val === 'number') {
-    if (val > 20000 && val < 70000) {
-      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
-      const parsed = new Date(excelEpoch.getTime() + val * 86400000);
+    // If Excel numerical serial date (e.g. 45200 ~ 2023)
+    if (typeof val === 'number') {
+      if (val > 20000 && val < 70000) {
+        const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+        const parsed = new Date(excelEpoch.getTime() + val * 86400000);
+        if (!isNaN(parsed.getTime())) return parsed.toISOString();
+      }
+      const parsed = new Date(val);
       if (!isNaN(parsed.getTime())) return parsed.toISOString();
     }
-    const parsed = new Date(val);
-    if (!isNaN(parsed.getTime())) return parsed.toISOString();
-  }
 
-  const str = String(val).trim();
-  if (!str) return new Date().toISOString();
+    const str = String(val).trim();
+    if (!str) return new Date().toISOString();
 
-  // Match DD/MM/YYYY or DD-MM-YYYY
-  const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
-  if (dmyMatch) {
-    const [, d, m, y, h = '0', min = '0', s = '0'] = dmyMatch;
-    const day = parseInt(d, 10);
-    const month = parseInt(m, 10);
-    const year = parseInt(y, 10);
+    // Match DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+    const dmyMatch = str.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (dmyMatch) {
+      const [, d, m, y, h = '0', min = '0', s = '0'] = dmyMatch;
+      const day = parseInt(d, 10);
+      const month = parseInt(m, 10);
+      const year = parseInt(y, 10);
 
-    // If day > 12, it's definitely DD/MM/YYYY
-    // If month > 12 and day <= 12, swap (MM/DD/YYYY)
-    if (day <= 12 && month > 12) {
-      const parsed = new Date(year, day - 1, month, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
-      if (!isNaN(parsed.getTime())) return parsed.toISOString();
-    } else {
-      const parsed = new Date(year, month - 1, day, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
+      if (day <= 12 && month > 12) {
+        // MM/DD/YYYY
+        const parsed = new Date(year, day - 1, month, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
+        if (!isNaN(parsed.getTime())) return parsed.toISOString();
+      } else {
+        // DD/MM/YYYY
+        const parsed = new Date(year, month - 1, day, parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
+        if (!isNaN(parsed.getTime())) return parsed.toISOString();
+      }
+    }
+
+    // Match YYYY-MM-DD or YYYY/MM/DD
+    const ymdMatch = str.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (ymdMatch) {
+      const [, y, m, d, h = '0', min = '0', s = '0'] = ymdMatch;
+      const parsed = new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), parseInt(h, 10), parseInt(min, 10), parseInt(s, 10));
       if (!isNaN(parsed.getTime())) return parsed.toISOString();
     }
-  }
 
-  // Standard Date parse fallback
-  const parsed = new Date(str);
-  if (!isNaN(parsed.getTime())) {
-    return parsed.toISOString();
+    // Standard Date parse fallback (handles ISO, '04 Sep 2026', 'September 4, 2026', etc.)
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString();
+    }
+  } catch {
+    // If any parsing error occurs, default to current date
   }
 
   return new Date().toISOString();
@@ -445,14 +458,10 @@ export function processRawRows(rawInput: any[]): ImportResult {
       return;
     }
 
-    // Skip summary rows (e.g. where Description or any cell is 'Total', 'Grand Total', etc.)
+    // Skip summary footer rows (e.g. where Description is explicitly 'Total', 'Grand Total', etc.)
     const rawDesc = descCol !== -1 ? String(row[descCol] ?? '').trim() : '';
     if (SUMMARY_LABEL_REGEX.test(rawDesc)) {
-      return; // Skip summary row
-    }
-    const isSummaryRow = row.some((cell: any) => SUMMARY_LABEL_REGEX.test(String(cell ?? '').trim()));
-    if (isSummaryRow) {
-      return; // Skip summary row
+      return; // Skip summary footer row
     }
 
     // 1. Amount & Type calculation

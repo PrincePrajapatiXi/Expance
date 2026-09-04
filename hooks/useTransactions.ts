@@ -27,6 +27,12 @@ export function useTransactions() {
   const [toast, setToast] = useState<ToastNotification | null>(null);
   const toastTimerRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [activeDateFilter, setActiveDateFilter] = useState<'all' | 'today' | 'week' | 'month' | 'custom'>('all');
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  });
+
   // Subtle auto-dismissing toast (2.5s)
   const showToast = useCallback(
     (message: string, type: 'error' | 'success' | 'info' | 'warning' = 'info', durationMs = 2500) => {
@@ -53,7 +59,7 @@ export function useTransactions() {
     setToast(null);
   }, []);
 
-  // Initial load
+  // Refetch / load transactions from local storage and DB
   const loadData = useCallback(async () => {
     const immediateLocal = getLocalTransactions();
     if (immediateLocal.length > 0) {
@@ -114,12 +120,37 @@ export function useTransactions() {
 
   // Real-time synchronization across tabs and components
   useEffect(() => {
-    const handleTxUpdate = (event: any) => {
-      if (event?.detail && Array.isArray(event.detail)) {
-        setTransactions(event.detail);
+    const handleTxUpdate = async (event: any) => {
+      const detail = event?.detail;
+      const txs = Array.isArray(detail)
+        ? detail
+        : Array.isArray(detail?.transactions)
+        ? detail.transactions
+        : null;
+
+      if (txs) {
+        setTransactions(txs);
       } else {
-        const local = getLocalTransactions();
-        setTransactions(local);
+        // Re-read / refetch immediately
+        await loadData();
+      }
+
+      // Check if imported rows contain dates outside the currently active month
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const listToCheck = txs || getLocalTransactions();
+
+      const hasOutOfMonth =
+        detail?.resetToAllTime ||
+        detail?.hasOutOfMonthDates ||
+        listToCheck.some((tx: any) => {
+          const m = (tx.timestamp || '').substring(0, 7);
+          return m && m !== currentMonth;
+        });
+
+      if (hasOutOfMonth) {
+        setActiveDateFilter('all');
+        setSelectedMonth('');
       }
     };
 
@@ -130,7 +161,7 @@ export function useTransactions() {
       window.removeEventListener('expance:transactions_updated', handleTxUpdate);
       window.removeEventListener('storage', handleTxUpdate);
     };
-  }, []);
+  }, [loadData]);
 
   // Add Transaction Handler
   const addNewTransaction = async (formData: TransactionFormData): Promise<Transaction> => {
@@ -184,6 +215,11 @@ export function useTransactions() {
     addNewTransaction,
     editExistingTransaction,
     removeTransaction,
+    refetch: loadData,
     refreshTransactions: loadData,
+    activeDateFilter,
+    setActiveDateFilter,
+    selectedMonth,
+    setSelectedMonth,
   };
 }

@@ -343,51 +343,138 @@ export function notifyTransactionsUpdated(transactions?: Transaction[]) {
 
 // 3. Bulk Add (for Excel/CSV Import)
 export async function bulkAddTransactions(importedList: Transaction[]): Promise<Transaction[]> {
-  if (!importedList.length) return [];
+  if (!importedList || !importedList.length) return [];
 
-  const currentLocal = getLocalTransactions();
-  const normalizedImported = importedList.map(normalizeTransaction);
-  const combinedLocal = [...normalizedImported, ...currentLocal];
-  saveLocalTransactions(combinedLocal);
-  notifyTransactionsUpdated(combinedLocal);
-
+  // Determine if user is authenticated with Supabase
+  let authUser: any = null;
   if (isSupabaseConfigured && supabase) {
     try {
-      const authUser = await getAuthUser();
-      if (authUser) {
-        const payload = normalizedImported.map((t) => ({
-          user_id: authUser.id,
-          type: t.type,
-          category: t.category,
-          description: t.description || '',
-          payment_mode: t.payment_method || t.payment_mode || 'UPI',
-          amount: Number(t.amount),
-          notes: t.notes || '',
-          timestamp: t.timestamp,
-        }));
-
-        const { data, error } = await supabase
-          .from('transactions')
-          .insert(payload)
-          .select();
-
-        if (error) {
-          console.error('[Supabase Bulk Insert Error]:', error.message, error);
-          emitDBEvent('insert_error', `Cloud bulk save failed: ${error.message}. Saved locally.`, error);
-        } else if (data) {
-          const remoteNormalized = data.map(normalizeTransaction);
-          const finalMerged = [...remoteNormalized, ...currentLocal];
-          saveLocalTransactions(finalMerged);
-          notifyTransactionsUpdated(finalMerged);
-          return remoteNormalized;
-        }
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (!authErr && authData?.user?.id) {
+        authUser = authData.user;
       }
-    } catch (err: any) {
-      console.error('[Supabase Bulk Insert Exception]:', err);
+    } catch (e) {
+      console.warn('[Supabase] bulkAddTransactions getUser error:', e);
     }
   }
 
-  return normalizedImported;
+  let finalSaved: Transaction[] = [];
+
+  // --- Authenticated Mode ---
+  if (authUser?.id) {
+    const userId = authUser.id;
+
+    // 1. Attach user_id: user.id to EVERY imported row
+    const rowsToInsert = importedList.map((t) => {
+      const norm = normalizeTransaction({
+        ...t,
+        user_id: userId,
+      });
+      return {
+        user_id: userId,
+        type: norm.type,
+        category: norm.category,
+        description: norm.description || '',
+        payment_mode: norm.payment_method || norm.payment_mode || 'UPI',
+        amount: Number(norm.amount) || 0,
+        notes: norm.notes || '',
+        timestamp: norm.timestamp || new Date().toISOString(),
+      };
+    });
+
+    // 2. Perform chunked inserts (chunks of 200 rows using .insert(chunk))
+    const CHUNK_SIZE = 200;
+    const insertedRecords: any[] = [];
+    let chunkInsertFailed = false;
+
+    for (let i = 0; i < rowsToInsert.length; i += CHUNK_SIZE) {
+      const chunk = rowsToInsert.slice(i, i + CHUNK_SIZE);
+      const { data, error } = await supabase
+        .from('transactions')
+        .insert(chunk)
+        .select();
+
+      if (error) {
+        console.error(`[Supabase Bulk Insert Error] Chunk ${Math.floor(i / CHUNK_SIZE) + 1}:`, error.message, error);
+        emitDBEvent('insert_error', `Cloud bulk save error: ${error.message}. Saving locally.`, error);
+        chunkInsertFailed = true;
+        break;
+      } else if (data) {
+        insertedRecords.push(...data);
+      }
+    }
+
+    const currentLocal = getLocalTransactions();
+
+    if (insertedRecords.length > 0 && !chunkInsertFailed) {
+      const normalizedRemote = insertedRecords.map(normalizeTransaction);
+      const remoteIds = new Set(normalizedRemote.map((r) => r.id));
+      const filteredLocal = currentLocal.filter((l) => !remoteIds.has(l.id));
+      finalSaved = [...normalizedRemote, ...filteredLocal];
+      saveLocalTransactions(finalSaved);
+    } else {
+      // Fallback: persist locally with user_id attached
+      const fallbackRows = importedList.map((t, idx) =>
+        normalizeTransaction({
+          ...t,
+          id: `tx-import-${Date.now()}-${idx}-${generateUUID().slice(0, 8)}`,
+          user_id: userId,
+        })
+      );
+      finalSaved = [...fallbackRows, ...currentLocal];
+      saveLocalTransactions(finalSaved);
+    }
+  } else {
+    // --- Guest Mode ---
+    // 1. Read current transactions array from localStorage
+    const currentLocal = getLocalTransactions();
+
+    // 2. Append all newly imported rows (assign unique UUIDs or timestamps to each id)
+    const normalizedNewRows = importedList.map((t, idx) => {
+      const uniqueId = `tx-guest-${Date.now()}-${idx}-${generateUUID().slice(0, 8)}`;
+      return normalizeTransaction({
+        ...t,
+        id: uniqueId,
+        user_id: CURRENT_USER.id,
+      });
+    });
+
+    // 3. Write back to localStorage
+    finalSaved = [...normalizedNewRows, ...currentLocal];
+    saveLocalTransactions(finalSaved);
+  }
+
+  // Check if imported rows contain dates outside the currently active month
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const hasOutOfMonthDates = importedList.some((tx) => {
+    const txMonth = (tx.timestamp || '').substring(0, 7);
+    return txMonth && txMonth !== currentMonth;
+  });
+
+  // Zero-Refresh UI Sync: Dispatch custom window event
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(
+      new CustomEvent('expance:transactions_updated', {
+        detail: {
+          transactions: finalSaved,
+          importedCount: importedList.length,
+          hasOutOfMonthDates,
+          resetToAllTime: hasOutOfMonthDates,
+        },
+      })
+    );
+
+    if (hasOutOfMonthDates) {
+      window.dispatchEvent(
+        new CustomEvent('expance:reset_date_filter', {
+          detail: { dateFilter: 'all', selectedMonth: '' },
+        })
+      );
+    }
+  }
+
+  return finalSaved;
 }
 
 // 4. Update Transaction
