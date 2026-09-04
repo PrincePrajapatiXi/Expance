@@ -97,6 +97,7 @@ export default function ImportModal({
   const handleConfirmImport = async () => {
     if (!result || !result.transactions.length) return;
     setIsSaving(true);
+    setErrorMsg(null);
     try {
       const added = await bulkAddTransactions(result.transactions);
       onImportSuccess(added);
@@ -104,7 +105,7 @@ export default function ImportModal({
       onClose();
     } catch (err: any) {
       console.error('Failed to import transactions:', err);
-      setErrorMsg('Failed to save imported records to database. Please try again.');
+      setErrorMsg(err?.message || 'Failed to save imported records to database. Please check your Supabase connection or permissions.');
     } finally {
       setIsSaving(false);
     }

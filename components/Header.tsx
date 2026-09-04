@@ -43,7 +43,7 @@ export default function Header({
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full max-w-full overflow-x-hidden bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 pl-3.5 pr-4 sm:px-6 py-2.5 sm:py-3 shadow-xs">
+      <header className="sticky top-0 z-40 w-full bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 pl-3.5 pr-4 sm:px-6 py-2.5 sm:py-3 shadow-xs">
         <div className="max-w-4xl mx-auto flex items-center justify-between gap-3 min-w-0 w-full">
           {/* Logo & Brand (No PRO badge) */}
           <Link href="/" className="flex items-center gap-2.5 group shrink-0">

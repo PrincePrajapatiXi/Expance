@@ -135,6 +135,11 @@ export function useTransactions() {
         await loadData();
       }
 
+      // Show success toast notification if imported
+      if (detail?.importedCount) {
+        showToast(`Imported ${detail.importedCount} transactions successfully!`, 'success', 3500);
+      }
+
       // Check if imported rows contain dates outside the currently active month
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -161,7 +166,7 @@ export function useTransactions() {
       window.removeEventListener('expance:transactions_updated', handleTxUpdate);
       window.removeEventListener('storage', handleTxUpdate);
     };
-  }, [loadData]);
+  }, [loadData, showToast]);
 
   // Add Transaction Handler
   const addNewTransaction = async (formData: TransactionFormData): Promise<Transaction> => {

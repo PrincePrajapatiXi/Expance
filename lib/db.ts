@@ -345,13 +345,13 @@ export function notifyTransactionsUpdated(transactions?: Transaction[]) {
 export async function bulkAddTransactions(importedList: Transaction[]): Promise<Transaction[]> {
   if (!importedList || !importedList.length) return [];
 
-  // Determine if user is authenticated with Supabase
-  let authUser: any = null;
+  // 1. Check authentication state with Supabase
+  let user: any = null;
   if (isSupabaseConfigured && supabase) {
     try {
       const { data: authData, error: authErr } = await supabase.auth.getUser();
       if (!authErr && authData?.user?.id) {
-        authUser = authData.user;
+        user = authData.user;
       }
     } catch (e) {
       console.warn('[Supabase] bulkAddTransactions getUser error:', e);
@@ -361,77 +361,105 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
   let finalSaved: Transaction[] = [];
 
   // --- Authenticated Mode ---
-  if (authUser?.id) {
-    const userId = authUser.id;
+  if (user?.id) {
+    const userId = user.id;
+    const nowIso = new Date().toISOString();
 
-    // 1. Attach user_id: user.id to EVERY imported row
+    // Attach user_id: user.id to EVERY single transaction item and format fields
     const rowsToInsert = importedList.map((t) => {
       const norm = normalizeTransaction({
         ...t,
         user_id: userId,
       });
+      const descVal = norm.description || 'Imported Expense';
+      const dateVal = norm.timestamp || nowIso;
+
       return {
+        id: generateUUID(),
         user_id: userId,
-        type: norm.type,
-        category: norm.category,
-        description: norm.description || '',
-        payment_mode: norm.payment_method || norm.payment_mode || 'UPI',
+        title: descVal,
+        description: descVal,
         amount: Number(norm.amount) || 0,
+        type: norm.type === 'income' ? 'income' : 'expense',
+        category: norm.category || 'Other / Misc',
+        payment_mode: norm.payment_method || norm.payment_mode || 'UPI',
         notes: norm.notes || '',
-        timestamp: norm.timestamp || new Date().toISOString(),
+        date: dateVal,
+        timestamp: dateVal,
+        created_at: nowIso,
       };
     });
 
-    // 2. Perform chunked inserts (chunks of 200 rows using .insert(chunk))
-    const CHUNK_SIZE = 200;
+    // Insert in batches of 100 via supabase.from('transactions').insert(batch)
+    const BATCH_SIZE = 100;
     const insertedRecords: any[] = [];
-    let chunkInsertFailed = false;
 
-    for (let i = 0; i < rowsToInsert.length; i += CHUNK_SIZE) {
-      const chunk = rowsToInsert.slice(i, i + CHUNK_SIZE);
-      const { data, error } = await supabase
+    for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+      const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
+
+      // Attempt insert with full schema fields
+      let { data, error } = await supabase
         .from('transactions')
-        .insert(chunk)
+        .insert(batch)
         .select();
 
+      // If schema doesn't have 'title' or 'date', retry with standard schema (description, timestamp)
+      if (
+        error &&
+        (error.message.includes('title') ||
+          error.message.includes('date') ||
+          error.code === 'PGRST204')
+      ) {
+        console.warn('[Supabase Bulk Insert] Retrying batch with standard schema fields...');
+        const standardBatch = batch.map((r) => ({
+          id: r.id,
+          user_id: r.user_id,
+          type: r.type,
+          category: r.category,
+          description: r.description,
+          payment_mode: r.payment_mode,
+          notes: r.notes,
+          amount: r.amount,
+          timestamp: r.timestamp,
+          created_at: r.created_at,
+        }));
+
+        const retryRes = await supabase
+          .from('transactions')
+          .insert(standardBatch)
+          .select();
+
+        data = retryRes.data;
+        error = retryRes.error;
+      }
+
       if (error) {
-        console.error(`[Supabase Bulk Insert Error] Chunk ${Math.floor(i / CHUNK_SIZE) + 1}:`, error.message, error);
-        emitDBEvent('insert_error', `Cloud bulk save error: ${error.message}. Saving locally.`, error);
-        chunkInsertFailed = true;
-        break;
-      } else if (data) {
+        console.error(`[Supabase Bulk Insert Error] Batch ${Math.floor(i / BATCH_SIZE) + 1}:`, error.message, error);
+        emitDBEvent('insert_error', `Cloud bulk save error: ${error.message}`, error);
+        // Throw so UI alerts the user instead of silent failure!
+        throw new Error(error.message || `Failed to insert transactions in batch ${Math.floor(i / BATCH_SIZE) + 1}`);
+      }
+
+      if (data) {
         insertedRecords.push(...data);
       }
     }
 
+    // Merge successfully inserted remote records into local cache
     const currentLocal = getLocalTransactions();
-
-    if (insertedRecords.length > 0 && !chunkInsertFailed) {
-      const normalizedRemote = insertedRecords.map(normalizeTransaction);
-      const remoteIds = new Set(normalizedRemote.map((r) => r.id));
-      const filteredLocal = currentLocal.filter((l) => !remoteIds.has(l.id));
-      finalSaved = [...normalizedRemote, ...filteredLocal];
-      saveLocalTransactions(finalSaved);
-    } else {
-      // Fallback: persist locally with user_id attached
-      const fallbackRows = importedList.map((t, idx) =>
-        normalizeTransaction({
-          ...t,
-          id: `tx-import-${Date.now()}-${idx}-${generateUUID().slice(0, 8)}`,
-          user_id: userId,
-        })
-      );
-      finalSaved = [...fallbackRows, ...currentLocal];
-      saveLocalTransactions(finalSaved);
-    }
+    const normalizedRemote = (insertedRecords.length > 0 ? insertedRecords : rowsToInsert).map(normalizeTransaction);
+    const remoteIds = new Set(normalizedRemote.map((r) => r.id));
+    const filteredLocal = currentLocal.filter((l) => !remoteIds.has(l.id));
+    finalSaved = [...normalizedRemote, ...filteredLocal];
+    saveLocalTransactions(finalSaved);
   } else {
-    // --- Guest Mode ---
-    // 1. Read current transactions array from localStorage
+    // --- Guest Mode / Unauthenticated ---
+    // 1. Read existing transactions array from localStorage
     const currentLocal = getLocalTransactions();
 
-    // 2. Append all newly imported rows (assign unique UUIDs or timestamps to each id)
-    const normalizedNewRows = importedList.map((t, idx) => {
-      const uniqueId = `tx-guest-${Date.now()}-${idx}-${generateUUID().slice(0, 8)}`;
+    // 2. Append all new items with generated unique IDs
+    const normalizedNewRows = importedList.map((t) => {
+      const uniqueId = generateUUID();
       return normalizeTransaction({
         ...t,
         id: uniqueId,
@@ -439,12 +467,12 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
       });
     });
 
-    // 3. Write back to localStorage
+    // 3. Save back to localStorage
     finalSaved = [...normalizedNewRows, ...currentLocal];
     saveLocalTransactions(finalSaved);
   }
 
-  // Check if imported rows contain dates outside the currently active month
+  // Check if imported transactions are outside current month (e.g. August data imported while on September)
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const hasOutOfMonthDates = importedList.some((tx) => {

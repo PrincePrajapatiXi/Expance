@@ -59,11 +59,10 @@ export default function MonthPickerPopover({
 
   // Outside click listener & ESC key listener
   useEffect(() => {
-    const handleEvents = (e: MouseEvent | KeyboardEvent) => {
+    const handleEvents = (e: MouseEvent | TouchEvent | KeyboardEvent) => {
       if (e instanceof KeyboardEvent && e.key === 'Escape') {
         setIsOpen(false);
       } else if (
-        e instanceof MouseEvent &&
         popoverRef.current &&
         !popoverRef.current.contains(e.target as Node)
       ) {
@@ -73,10 +72,12 @@ export default function MonthPickerPopover({
 
     if (isOpen) {
       document.addEventListener('mousedown', handleEvents);
+      document.addEventListener('touchstart', handleEvents);
       document.addEventListener('keydown', handleEvents);
     }
     return () => {
       document.removeEventListener('mousedown', handleEvents);
+      document.removeEventListener('touchstart', handleEvents);
       document.removeEventListener('keydown', handleEvents);
     };
   }, [isOpen]);
@@ -111,15 +112,21 @@ export default function MonthPickerPopover({
   };
 
   return (
-    <div className="relative" ref={popoverRef}>
+    <div className="relative z-50" ref={popoverRef}>
       {/* Trigger Button */}
       <button
-        onClick={() => {
+        id="month-picker-pill"
+        onClick={(e) => {
+          e.stopPropagation();
           triggerHaptic(10);
           setIsOpen((prev) => !prev);
         }}
         type="button"
-        className="flex items-center gap-1.5 sm:gap-2 bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-100 rounded-xl px-2.5 sm:px-3 py-1.5 border border-slate-200/80 dark:border-slate-700 shadow-2xs transition-transform duration-100 ease-out active:scale-95 cursor-pointer select-none max-w-[170px] sm:max-w-none"
+        className={`flex items-center gap-1.5 sm:gap-2 rounded-xl px-2.5 sm:px-3 py-1.5 border shadow-2xs transition-all duration-100 ease-out active:scale-95 cursor-pointer select-none max-w-[170px] sm:max-w-none ${
+          isOpen
+            ? 'bg-indigo-100 dark:bg-indigo-950/80 text-indigo-900 dark:text-indigo-200 border-indigo-300 dark:border-indigo-800'
+            : 'bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200/80 dark:hover:bg-slate-700/80 text-slate-800 dark:text-slate-100 border-slate-200/80 dark:border-slate-700'
+        }`}
         aria-label="Select month and year"
         aria-expanded={isOpen}
       >
@@ -129,9 +136,17 @@ export default function MonthPickerPopover({
         </span>
       </button>
 
+      {/* Backdrop for Mobile */}
+      {isOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-slate-950/30 backdrop-blur-2xs sm:hidden"
+          onClick={() => setIsOpen(false)}
+        />
+      )}
+
       {/* Modern Popover Grid Modal */}
       {isOpen && (
-        <div className="absolute right-0 mt-2 w-72 sm:w-80 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed sm:absolute right-3 sm:right-0 top-16 sm:top-full sm:mt-2 w-[calc(100vw-1.5rem)] sm:w-80 max-w-sm bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200/90 dark:border-slate-800 p-4 z-50 animate-in fade-in zoom-in-95 duration-150">
           {/* Popover Header: Year Navigator */}
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <button
