@@ -483,6 +483,9 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
     );
 
     if (hasOutOfMonthDates) {
+      // Set a localStorage flag so Dashboard resets to All Time on its next mount.
+      // This handles cross-page navigation: profile page imports, Dashboard mounts later.
+      localStorage.setItem('expance:pending_filter_reset', '1');
       window.dispatchEvent(
         new CustomEvent('expance:reset_date_filter', {
           detail: { dateFilter: 'all', selectedMonth: '' },

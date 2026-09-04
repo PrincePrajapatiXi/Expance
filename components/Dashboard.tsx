@@ -20,13 +20,23 @@ export default function Dashboard() {
   const currentDate = new Date();
   const currentMonthStr = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}`;
 
-  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthStr);
-  const [filters, setFilters] = useState<FilterOptions>({
-    type: 'all',
-    category: 'all',
-    dateRange: 'all',
-    searchQuery: '',
-    selectedMonth: currentMonthStr,
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    // If a bulk import just happened with out-of-month dates, start with All Time
+    if (typeof window !== 'undefined' && localStorage.getItem('expance:pending_filter_reset') === '1') {
+      localStorage.removeItem('expance:pending_filter_reset');
+      return '';
+    }
+    return currentMonthStr;
+  });
+  const [filters, setFilters] = useState<FilterOptions>(() => {
+    const hasReset = typeof window !== 'undefined' && localStorage.getItem('expance:pending_filter_reset') === '1';
+    return {
+      type: 'all',
+      category: 'all',
+      dateRange: hasReset ? 'all' : 'all',
+      searchQuery: '',
+      selectedMonth: currentMonthStr,
+    };
   });
 
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -78,7 +88,7 @@ export default function Dashboard() {
       setFilters((prev) => ({ ...prev, dateRange: 'all', selectedMonth: '' }));
     };
 
-    // Re-fetch when user switches back to this tab/page after importing on profile page
+    // Re-fetch when user switches back to this tab/page (e.g. from profile after import)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
         refetch();
@@ -95,6 +105,21 @@ export default function Dashboard() {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [refetch]);
+
+  // Auto-reset filter: if current month filter hides ALL transactions but "All Time" would show some,
+  // automatically switch to All Time. This covers the case where user imports past-month data then
+  // navigates to Dashboard which still has the current-month filter active.
+  React.useEffect(() => {
+    if (!loading && transactions.length > 0 && selectedMonth) {
+      const hasMatchingMonth = transactions.some(
+        (tx) => tx.timestamp && tx.timestamp.substring(0, 7) === selectedMonth
+      );
+      if (!hasMatchingMonth) {
+        setSelectedMonth('');
+        setFilters((prev) => ({ ...prev, dateRange: 'all', selectedMonth: '' }));
+      }
+    }
+  }, [loading, transactions, selectedMonth]);
 
   // Filter Transactions based on UI controls & Selected Month
   const filteredTransactions = transactions.filter((tx) => {
