@@ -83,10 +83,16 @@ export function useTransactions() {
     if (isSupabaseConfigured && supabase) {
       getAuthUser().then((user) => {
         setIsAuthenticated(Boolean(user));
+        // Only sync if we have local-only (guest) transactions
+        // Skip if we're already authenticated (transactions should come from Supabase via loadData)
         if (user) {
-          syncLocalTransactionsToSupabase(user.id).then((synced) => {
-            setTransactions(synced);
-          });
+          const localTxs = getLocalTransactions();
+          const hasGuestLocal = localTxs.some((t) => t.user_id === 'guest-user');
+          if (hasGuestLocal) {
+            syncLocalTransactionsToSupabase(user.id).then((synced) => {
+              setTransactions(synced);
+            });
+          }
         }
       });
 
@@ -128,10 +134,12 @@ export function useTransactions() {
         ? detail.transactions
         : null;
 
-      if (txs) {
+      if (txs && txs.length > 0) {
+        // Directly use the provided list — no extra fetch needed.
+        // This prevents race conditions where Supabase hasn't replicated yet.
         setTransactions(txs);
-      } else {
-        // Re-read / refetch immediately
+      } else if (!txs) {
+        // Only re-fetch when no transaction list provided (e.g. delete/update events)
         await loadData();
       }
 
