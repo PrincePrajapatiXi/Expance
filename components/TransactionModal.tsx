@@ -4,9 +4,10 @@ import React, { useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, AnimatePresence, PanInfo } from 'framer-motion';
-import { X, Plus, Check, Calendar, FileText, CreditCard, MessageSquare, TrendingUp, TrendingDown } from 'lucide-react';
+import { X, Plus, Check, FileText, CreditCard, MessageSquare, TrendingUp, TrendingDown } from 'lucide-react';
 import { transactionSchema, TransactionFormData, Transaction, PaymentMethod } from '@/lib/types';
 import { CATEGORIES, toDateTimeLocalFormat, triggerHaptic } from '@/lib/utils';
+import DateTimePicker from '@/components/DateTimePicker';
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -323,14 +324,10 @@ export default function TransactionModal({
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
                   Date & Time
                 </label>
-                <div className="relative">
-                  <Calendar className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="datetime-local"
-                    {...register('timestamp')}
-                    className="w-full bg-slate-50 dark:bg-slate-800/80 text-xs font-medium text-slate-900 dark:text-slate-100 rounded-2xl pl-10 pr-4 py-3 border border-slate-200 dark:border-slate-700 focus:outline-hidden focus:ring-2 focus:ring-indigo-500/40"
-                  />
-                </div>
+                <DateTimePicker
+                  value={watch('timestamp') || toDateTimeLocalFormat(new Date())}
+                  onChange={(val) => setValue('timestamp', val, { shouldValidate: true })}
+                />
                 {errors.timestamp && (
                   <p className="text-rose-600 text-[11px] font-semibold mt-1">
                     {errors.timestamp.message}
