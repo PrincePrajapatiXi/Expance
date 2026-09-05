@@ -356,6 +356,13 @@ export function notifyTransactionsUpdated(transactions?: Transaction[]) {
 export async function bulkAddTransactions(importedList: Transaction[]): Promise<Transaction[]> {
   if (!importedList || !importedList.length) return [];
 
+  // Helper: build a composite dedup key from a transaction
+  function compositeKey(t: { timestamp?: string; amount?: number | string; description?: string; category?: string }): string {
+    // Normalize timestamp to date-only (YYYY-MM-DD) to avoid minor time drift duplicates
+    const dateOnly = (t.timestamp || '').substring(0, 10);
+    return `${dateOnly}_${Number(t.amount || 0).toFixed(2)}_${String(t.description || '').trim().toLowerCase()}_${String(t.category || '').trim().toLowerCase()}`;
+  }
+
   // 1. Check authentication state with Supabase
   let user: any = null;
   if (isSupabaseConfigured && supabase) {
@@ -376,10 +383,24 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
     const userId = user.id;
     const nowIso = new Date().toISOString();
 
+    // Fetch existing transactions from Supabase to deduplicate
+    let existingKeys = new Set<string>();
+    try {
+      const { data: existing } = await supabase
+        .from('transactions')
+        .select('timestamp, amount, description, category')
+        .eq('user_id', userId);
+      if (existing) {
+        existing.forEach((row: any) => existingKeys.add(compositeKey(row)));
+      }
+    } catch (e) {
+      console.warn('[Supabase] Could not fetch existing transactions for dedup check:', e);
+    }
+
     // Build rows using ONLY the columns the Supabase schema accepts
     // (same columns as addTransaction: user_id, type, category, description, payment_mode, amount, notes, timestamp)
     // Do NOT send id/title/date/created_at — Supabase generates id and created_at server-side
-    const rowsToInsert = importedList.map((t) => {
+    const allRows = importedList.map((t) => {
       const norm = normalizeTransaction({
         ...t,
         user_id: userId,
@@ -398,6 +419,20 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
         timestamp: dateVal,
       };
     });
+
+    // Filter out duplicates: skip rows whose composite key already exists in Supabase
+    const rowsToInsert = allRows.filter((row) => {
+      const key = compositeKey({ timestamp: row.timestamp, amount: row.amount, description: row.description, category: row.category });
+      if (existingKeys.has(key)) return false;
+      // Add to set so same-file duplicates (multiple identical rows) are also deduplicated
+      existingKeys.add(key);
+      return true;
+    });
+
+    const skippedCount = allRows.length - rowsToInsert.length;
+    if (skippedCount > 0) {
+      console.log(`[Bulk Import] Skipped ${skippedCount} duplicate transaction(s) already present in database.`);
+    }
 
     // Insert in batches of 100
     const BATCH_SIZE = 100;
@@ -432,6 +467,10 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
       const remoteIds = new Set(normalizedRemote.map((r) => r.id));
       const filteredLocal = currentLocal.filter((l) => !remoteIds.has(l.id));
       finalSaved = [...normalizedRemote, ...filteredLocal];
+    } else if (rowsToInsert.length === 0) {
+      // All rows were duplicates — return current state without modification
+      console.log('[Bulk Import] All imported rows were duplicates. Nothing new added.');
+      finalSaved = currentLocal;
     } else {
       // insert returned no data — fall back to local with generated IDs
       console.warn('[Supabase Bulk Insert] Insert succeeded but returned no rows, using local fallback');
@@ -446,15 +485,28 @@ export async function bulkAddTransactions(importedList: Transaction[]): Promise<
     // 1. Read existing transactions array from localStorage
     const currentLocal = getLocalTransactions();
 
-    // 2. Append all new items with generated unique IDs
-    const normalizedNewRows = importedList.map((t) => {
-      const uniqueId = generateUUID();
-      return normalizeTransaction({
-        ...t,
-        id: uniqueId,
-        user_id: CURRENT_USER.id,
-      });
-    });
+    // Build a set of composite keys from existing local transactions to deduplicate
+    const existingLocalKeys = new Set<string>(currentLocal.map(compositeKey));
+
+    // 2. Append only NEW items (skip duplicates by composite key)
+    const normalizedNewRows: Transaction[] = [];
+    for (const t of importedList) {
+      const key = compositeKey(t);
+      if (existingLocalKeys.has(key)) continue; // skip duplicate
+      existingLocalKeys.add(key); // prevent same-file duplicates too
+      normalizedNewRows.push(
+        normalizeTransaction({
+          ...t,
+          id: generateUUID(),
+          user_id: CURRENT_USER.id,
+        })
+      );
+    }
+
+    const skippedCount = importedList.length - normalizedNewRows.length;
+    if (skippedCount > 0) {
+      console.log(`[Bulk Import] Skipped ${skippedCount} duplicate transaction(s) already in local storage.`);
+    }
 
     // 3. Save back to localStorage
     finalSaved = [...normalizedNewRows, ...currentLocal];

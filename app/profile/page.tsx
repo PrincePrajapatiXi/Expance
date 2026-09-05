@@ -245,12 +245,33 @@ export default function ProfilePage() {
     setTimeout(() => setMessage(null), 4000);
   };
 
-  const handleClearData = () => {
-    if (confirm('Are you sure you want to clear all transaction records?')) {
+  const handleClearData = async () => {
+    if (!confirm('Are you sure you want to delete ALL transactions? This will remove them from the database too and cannot be undone.')) return;
+    try {
+      // 1. Clear from Supabase if authenticated
+      if (isSupabaseConfigured && supabase) {
+        const { data: authData } = await supabase.auth.getUser();
+        if (authData?.user?.id) {
+          const { error } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('user_id', authData.user.id);
+          if (error) {
+            console.error('[Clear All] Supabase delete error:', error.message);
+          } else {
+            console.log('[Clear All] Supabase transactions deleted successfully.');
+          }
+        }
+      }
+      // 2. Clear from localStorage
       const reset = clearAllTransactions();
       setTransactions(reset);
-      setMessage('All transaction history cleared successfully.');
-      setTimeout(() => setMessage(null), 3000);
+      setMessage('✅ All transactions deleted from database and local storage.');
+      setTimeout(() => setMessage(null), 4000);
+    } catch (err: any) {
+      console.error('[Clear All] Error:', err);
+      setMessage('Failed to clear all transactions. Please try again.');
+      setTimeout(() => setMessage(null), 4000);
     }
   };
 

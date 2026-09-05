@@ -96,11 +96,14 @@ export default function ImportModal({
 
   const handleConfirmImport = async () => {
     if (!result || !result.transactions.length) return;
+    // Prevent double-submit
+    if (isSaving) return;
     setIsSaving(true);
     setErrorMsg(null);
     try {
-      const added = await bulkAddTransactions(result.transactions);
-      onImportSuccess(added);
+      const savedAll = await bulkAddTransactions(result.transactions);
+      // savedAll is the full updated list; newly added = difference from before import
+      onImportSuccess(savedAll);
       resetState();
       onClose();
     } catch (err: any) {
